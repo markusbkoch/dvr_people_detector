@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.python-version
+.pytest_cache/
+.mypy_cache/
+
+# Virtual env
+.venv/
+venv/
+
+# Secrets / local env
+.secrets
+.env
+.env.*
+
+# OS/editor noise
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+logs/
+*.log
+
+# Runtime/generated data
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+data/snapshots/*
+!data/snapshots/.gitkeep
+
+data/snapshots_denoised_test/*
+!data/snapshots_denoised_test/.gitkeep
+
+data/detector_dataset/
+data/detector_training/
+
+# Model artifacts (keep directory scaffold if desired)
+detection_models/*.pt
+!detection_models/.gitkeep
