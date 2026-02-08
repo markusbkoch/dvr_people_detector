@@ -20,7 +20,8 @@ if str(ROOT) not in sys.path:
 
 from app.face_rules import FaceEmbeddingEngine
 from app.camera import RtspCamera
-from app.config import CameraConfig, build_camera_map, load_settings
+from app.config import CameraConfig, Settings, build_camera_map, load_settings
+from app.detector import PersonDetector
 
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -42,6 +43,7 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
     db_path: Path = Path("data/faces.db")
     snapshot_dir: Path = Path("data/snapshots")
     camera_map: dict[int, CameraConfig] = {}
+    settings: Settings | None = None
 
     def _connect(self) -> sqlite3.Connection:
         """Open SQLite connection and ensure required tables exist."""
@@ -287,6 +289,15 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
             return
 
         client = RtspCamera(camera=camera, reconnect_seconds=1.0, rtsp_transport="tcp")
+        detector: PersonDetector | None = None
+        ignored_boxes = []
+        if self.settings is not None:
+            ignored_boxes = self.settings.ignored_person_bboxes.get(channel_id, [])
+            detector = PersonDetector(
+                model_name=self.settings.yolo_model,
+                confidence_threshold=self.settings.confidence_threshold,
+                tracker_mode=(self.settings.person_tracker if self.settings.capture_mode == "rtsp" else "none"),
+            )
         boundary = "frame"
         self.send_response(200)
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
@@ -302,7 +313,16 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
                     time.sleep(0.05)
                     continue
 
-                ok, encoded = cv2.imencode(".jpg", packet.frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+                frame = packet.frame
+                if detector is not None:
+                    try:
+                        _, annotated, _, _, _ = detector.detect(frame.copy(), ignored_boxes=ignored_boxes)
+                        frame = annotated
+                    except Exception:
+                        # Keep feed alive even if annotation path fails.
+                        frame = packet.frame
+
+                ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
                 if not ok:
                     continue
                 payload = encoded.tobytes()
@@ -363,6 +383,7 @@ python main.py</pre>
             <tr><td><code>DVR_USERNAME</code>, <code>DVR_PASSWORD</code>, <code>DVR_IP</code></td><td><code>(required)</code></td><td>DVR access credentials and host.</td></tr>
             <tr><td><code>CAMERA_CHANNELS</code></td><td><code>(required)</code></td><td>Runtime channel map in <code>channel_id:name</code> format separated by <code>;</code>.</td></tr>
             <tr><td><code>CAPTURE_MODE</code></td><td><code>isapi</code></td><td><code>isapi</code> or <code>rtsp</code>.</td></tr>
+            <tr><td><code>PERSON_TRACKER</code></td><td><code>bytetrack</code></td><td>RTSP tracker backend: <code>bytetrack</code>, <code>botsort</code>, or <code>none</code>.</td></tr>
             <tr><td><code>PERSON_CONFIDENCE_THRESHOLD</code></td><td><code>0.65</code></td><td>Minimum confidence for person detection.</td></tr>
             <tr><td><code>PERSON_MIN_BOX_AREA_PX</code></td><td><code>0</code></td><td>Minimum person box area in pixels. Set <code>0</code> to disable.</td></tr>
             <tr><td><code>PERSON_MIN_MOVEMENT_PX</code></td><td><code>0</code></td><td>Minimum person-box center movement across confirmation window. Set <code>0</code> to disable.</td></tr>
@@ -1269,9 +1290,11 @@ def main() -> None:
     try:
         settings = load_settings(".secrets")
         FaceGalleryHandler.camera_map = build_camera_map(settings)
+        FaceGalleryHandler.settings = settings
     except Exception as exc:
         print(f"Warning: live RTSP page disabled ({exc})")
         FaceGalleryHandler.camera_map = {}
+        FaceGalleryHandler.settings = None
 
     server = ThreadingHTTPServer((args.host, args.port), FaceGalleryHandler)
     print(f"Gallery running on http://{args.host}:{args.port}")

@@ -63,6 +63,7 @@ class PendingDetectionState:
     hit_count: int
     last_box: Optional[tuple[int, int, int, int]]
     max_movement_px: float
+    track_id: Optional[int]
 
 
 class RuntimeStats:
@@ -780,7 +781,7 @@ class SurveillanceApp:
     def _send_periodic_snapshot(self, detector: PersonDetector, frame_packet: CameraFrame) -> None:
         """Execute unconditional periodic snapshot path for one frame."""
         ignored_boxes = self.settings.ignored_person_bboxes.get(frame_packet.camera.channel_key, [])
-        has_person, annotated, confidence, _ = detector.detect(
+        has_person, annotated, confidence, _, _ = detector.detect(
             frame_packet.frame,
             ignored_boxes=ignored_boxes,
         )
@@ -835,7 +836,7 @@ class SurveillanceApp:
             # at finalize time, fall back to the trigger frame annotation so alerts
             # consistently contain a person box.
             ignored_boxes = self.settings.ignored_person_bboxes.get(camera_id, [])
-            has_person, annotated, _, _ = detector.detect(
+            has_person, annotated, _, _, _ = detector.detect(
                 burst.best_frame.copy(),
                 ignored_boxes=ignored_boxes,
             )
@@ -892,7 +893,7 @@ class SurveillanceApp:
             return
 
         ignored_boxes = self.settings.ignored_person_bboxes.get(camera_id, [])
-        has_person, annotated, confidence, max_box = detector.detect(
+        has_person, annotated, confidence, max_box, max_track_id = detector.detect(
             frame_packet.frame,
             ignored_boxes=ignored_boxes,
         )
@@ -933,6 +934,8 @@ class SurveillanceApp:
 
         now = monotonic()
         pending = self.pending_detection_by_camera.get(camera_id)
+        if pending is not None and max_track_id is not None and pending.track_id is not None and pending.track_id != max_track_id:
+            pending = None
         if pending is None or (now - pending.last_seen_at) > self.settings.detection_confirmation_window_seconds:
             pending = PendingDetectionState(
                 first_seen_at=now,
@@ -940,6 +943,7 @@ class SurveillanceApp:
                 hit_count=1,
                 last_box=max_box,
                 max_movement_px=0.0,
+                track_id=max_track_id,
             )
         else:
             movement = 0.0
@@ -1040,6 +1044,11 @@ class SurveillanceApp:
                     detector = PersonDetector(
                         model_name=self._current_model_name(),
                         confidence_threshold=self.settings.confidence_threshold,
+                        tracker_mode=(
+                            self.settings.person_tracker
+                            if self.settings.capture_mode == "rtsp"
+                            else "none"
+                        ),
                     )
                     detector_generation = current_generation
                     logger.info(

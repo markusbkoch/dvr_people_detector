@@ -58,6 +58,7 @@ FACE_MATCH_THRESHOLD=0.80
 FACE_MIN_SAMPLES=3
 
 RTSP_TRANSPORT=tcp
+PERSON_TRACKER=bytetrack
 CAMERA_RECONNECT_SECONDS=5
 YOLO_MODEL=detection_models/yolov8n.pt
 
@@ -209,6 +210,10 @@ Periodic status reports are enabled by default every 12 hours and can be configu
 - `RTSP_TRANSPORT` (default: `tcp`)
   - RTSP transport for OpenCV/FFmpeg.
   - Typical values: `tcp`, `udp`.
+- `PERSON_TRACKER` (default: `bytetrack`)
+  - Tracker backend used in RTSP mode.
+  - Supported values: `bytetrack`, `botsort`, `none`.
+  - `none` disables tracker integration and uses per-frame detection only.
 - `ISAPI_AUTH_MODE` (default: `auto`)
   - Auth mode for ISAPI requests.
   - Supported values: `auto`, `digest`, `basic`.

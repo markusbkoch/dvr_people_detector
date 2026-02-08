@@ -73,6 +73,7 @@ class Settings:
     camera_reconnect_seconds: float
     capture_mode: str
     rtsp_transport: str
+    person_tracker: str
     isapi_timeout_seconds: float
     isapi_auth_mode: str
     yolo_model: str
@@ -212,6 +213,7 @@ def load_settings(secrets_path: str = ".secrets") -> Settings:
         camera_reconnect_seconds=float(_get_env("CAMERA_RECONNECT_SECONDS", file_values, "5")),
         capture_mode=_get_env("CAPTURE_MODE", file_values, "isapi").lower(),
         rtsp_transport=_get_env("RTSP_TRANSPORT", file_values, "tcp").lower(),
+        person_tracker=_get_env("PERSON_TRACKER", file_values, "bytetrack").lower(),
         isapi_timeout_seconds=float(_get_env("ISAPI_TIMEOUT_SECONDS", file_values, "4")),
         isapi_auth_mode=_get_env("ISAPI_AUTH_MODE", file_values, "auto").lower(),
         yolo_model=_get_env("YOLO_MODEL", file_values, "detection_models/yolov8n.pt"),
