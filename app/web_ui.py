@@ -231,18 +231,23 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
 
     def _render_live(self) -> str:
         """Render browser page with live MJPEG streams from shared preview frames."""
-        cards = []
+        tiles = []
+        camera_items: list[tuple[int, str]] = []
         for channel_id in sorted(self.camera_map):
             camera = self.camera_map[channel_id]
-            stream_src = f"/live/stream?channel={channel_id}"
-            cards.append(
+            thumb_src = f"/live/frame?channel={channel_id}"
+            camera_items.append((channel_id, camera.name))
+            tiles.append(
                 f"""
-                <section class="card">
-                  <div class="title">{html.escape(camera.name)} <span class="sub">({channel_id})</span></div>
-                  <img src="{stream_src}" alt="live {html.escape(camera.name)}" loading="lazy" />
-                </section>
+                <button class="thumb" type="button" data-channel="{channel_id}" data-name="{html.escape(camera.name)}">
+                  <img src="{thumb_src}" alt="live {html.escape(camera.name)}" loading="lazy" />
+                  <span class="thumb-label">{html.escape(camera.name)} ({channel_id})</span>
+                </button>
                 """
             )
+        camera_list_js = ",".join(
+            f"{{channel:{channel_id},name:{camera_name!r}}}" for channel_id, camera_name in camera_items
+        )
         return f"""
         <html>
         <head>
@@ -252,21 +257,117 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
           <style>
             body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; background: #f6f7f9; color: #111; }}
             a {{ color: #2563eb; text-decoration: none; }}
-            .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; }}
-            .card {{ background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px; }}
+            .viewer {{ background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; }}
+            .viewer img {{ width: 100%; max-height: 70vh; object-fit: contain; background: #111; border-radius: 10px; }}
+            .viewer-top {{ display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 8px; }}
+            .viewer-title {{ font-weight: 700; }}
+            .viewer-help {{ color: #555; font-size: 0.9rem; }}
+            .thumbs {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; }}
+            .thumb {{ border: 2px solid #d1d5db; background: white; border-radius: 10px; padding: 6px; cursor: pointer; text-align: left; }}
+            .thumb.active {{ border-color: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; }}
+            .thumb img {{ width: 100%; height: 108px; object-fit: cover; border-radius: 6px; background: #111; display: block; }}
+            .thumb-label {{ display: block; margin-top: 5px; font-size: 0.88rem; color: #333; }}
             .title {{ font-weight: 700; margin-bottom: 8px; }}
             .sub {{ font-weight: 400; color: #555; }}
-            img {{ width: 100%; height: auto; background: #111; border-radius: 8px; }}
           </style>
         </head>
         <body>
           <p><a href="/">← Home</a> · <a href="/snapshots">Snapshot Review</a> · <a href="/people">People Gallery</a></p>
           <h1>Live Feed</h1>
           <p>Feeds are served from the running surveillance process.</p>
-          <div class="grid">{''.join(cards) if cards else '<p>No cameras configured.</p>'}</div>
+          {'' if camera_items else '<p>No cameras configured.</p>'}
+          <section class="viewer" id="viewer" style="display:{'block' if camera_items else 'none'};">
+            <div class="viewer-top">
+              <div class="viewer-title" id="viewer-title"></div>
+              <div class="viewer-help">Use ← / → to switch cameras</div>
+            </div>
+            <img id="viewer-image" src="" alt="live focused camera" loading="eager" />
+          </section>
+          <div class="thumbs">{''.join(tiles)}</div>
+          <script>
+            const cameras = [{camera_list_js}];
+            let currentIndex = 0;
+            let streamNonce = 0;
+            const titleEl = document.getElementById("viewer-title");
+            const imageEl = document.getElementById("viewer-image");
+            const thumbEls = Array.from(document.querySelectorAll(".thumb"));
+
+            function streamUrl(channel) {{
+              streamNonce += 1;
+              return "/live/stream?channel=" + encodeURIComponent(channel) + "&v=" + streamNonce;
+            }}
+            function frameUrl(channel) {{
+              streamNonce += 1;
+              return "/live/frame?channel=" + encodeURIComponent(channel) + "&v=" + streamNonce;
+            }}
+            function refreshThumbs() {{
+              thumbEls.forEach((el) => {{
+                const img = el.querySelector("img");
+                const channel = Number(el.dataset.channel || "0");
+                if (!img || !channel) return;
+                img.src = frameUrl(channel);
+              }});
+            }}
+
+            function setCurrent(index) {{
+              if (!cameras.length) return;
+              currentIndex = (index + cameras.length) % cameras.length;
+              const camera = cameras[currentIndex];
+              titleEl.textContent = camera.name + " (" + camera.channel + ")";
+              // Force stream teardown/reconnect to guarantee camera switch.
+              imageEl.src = "";
+              requestAnimationFrame(() => {{
+                imageEl.src = streamUrl(camera.channel);
+              }});
+              thumbEls.forEach((el, idx) => el.classList.toggle("active", idx === currentIndex));
+            }}
+
+            thumbEls.forEach((el, idx) => {{
+              el.addEventListener("click", () => setCurrent(idx));
+            }});
+
+            document.addEventListener("keydown", (event) => {{
+              if (event.key === "ArrowRight") {{
+                event.preventDefault();
+                setCurrent(currentIndex + 1);
+              }} else if (event.key === "ArrowLeft") {{
+                event.preventDefault();
+                setCurrent(currentIndex - 1);
+              }}
+            }});
+
+            setCurrent(0);
+            setInterval(refreshThumbs, 1500);
+          </script>
         </body>
         </html>
         """
+
+    def _send_live_frame(self, channel_id: int) -> None:
+        """Send a single JPEG frame for one camera."""
+        camera = self.camera_map.get(channel_id)
+        if camera is None:
+            self.send_error(404, "Unknown camera channel")
+            return
+        provider = self.live_frame_provider
+        if provider is None:
+            self.send_error(503, "Live frame provider unavailable")
+            return
+        packet = provider(channel_id)
+        if packet is None:
+            self.send_response(204)
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.end_headers()
+            return
+        _, payload = packet
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.end_headers()
+        self.wfile.write(payload)
 
     def _send_mjpeg_stream(self, channel_id: int) -> None:
         """Stream one camera preview as MJPEG multipart response."""
@@ -1001,6 +1102,15 @@ python main.py</pre>
                 self.send_error(400, "Missing or invalid channel")
                 return
             self._send_mjpeg_stream(int(channel_raw))
+            return
+
+        if parsed.path == "/live/frame":
+            query = parse_qs(parsed.query)
+            channel_raw = (query.get("channel", [""])[0] or "").strip()
+            if not channel_raw.isdigit():
+                self.send_error(400, "Missing or invalid channel")
+                return
+            self._send_live_frame(int(channel_raw))
             return
 
         if parsed.path == "/snapshots":
