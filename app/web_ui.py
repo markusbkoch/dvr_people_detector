@@ -402,37 +402,15 @@ python main.py</pre>
             </ul>
           </div>
 
-          <h2>5. Rebuild Face Clusters</h2>
-          <pre>python scripts/bootstrap_face_db.py --snapshot-dir data/snapshots --db-path data/faces.db</pre>
-          <p><strong>What it does:</strong> Scans snapshots, detects faces, builds embeddings, and assigns/updates person clusters.</p>
-          <p><strong>Uses your feedback:</strong> Reads <code>snapshot_reviews</code> and applies:</p>
-          <ul>
-            <li><code>detector_label = no_person</code>: snapshot is skipped</li>
-            <li><code>detector_label = person</code> + assigned <code>person_id</code>: sample is forced into that identity</li>
-            <li>Unassigned person snapshots: auto-clustered by embedding similarity</li>
-          </ul>
-
-          <h3>Important options</h3>
-          <table>
-            <tr><th>Option</th><th>Default</th><th>Meaning</th></tr>
-            <tr><td><code>--snapshot-dir</code></td><td><code>data/snapshots</code></td><td>Input images to process.</td></tr>
-            <tr><td><code>--db-path</code></td><td><code>data/faces.db</code></td><td>SQLite DB to read/write.</td></tr>
-            <tr><td><code>--cluster-threshold</code></td><td><code>0.84</code></td><td>Higher values create more separate people; lower values merge more aggressively.</td></tr>
-            <tr><td><code>--rebuild</code></td><td><code>off</code></td><td>Clears <code>persons</code>, <code>face_samples</code>, and <code>detector_reviews</code> before reprocessing.</td></tr>
-            <tr><td><code>--yes</code></td><td><code>off</code></td><td>Skips the confirmation prompt for <code>--rebuild</code> (automation use only).</td></tr>
-          </table>
-
-          <h3>Safe mode vs destructive mode</h3>
-          <ul>
-            <li><strong>Safe incremental run</strong> (recommended during review cycles):</li>
-          </ul>
-          <pre>python scripts/bootstrap_face_db.py --snapshot-dir data/snapshots --db-path data/faces.db</pre>
-          <ul>
-            <li><strong>Full rebuild</strong> (after major relabeling/cleanup):</li>
-          </ul>
-          <pre>python scripts/bootstrap_face_db.py --snapshot-dir data/snapshots --db-path data/faces.db --rebuild</pre>
-          <p>With <code>--rebuild</code>, the script now shows a warning and asks you to type <code>REBUILD</code> before any deletion.</p>
-          <p>Use <code>--yes</code> only for CI/scripts where interactive confirmation is not possible.</p>
+          <h2>5. Face Data Flow</h2>
+          <div class="card">
+            <ul>
+              <li>When alerts are generated, the runtime already extracts and stores face samples in <code>face_samples</code>.</li>
+              <li>Use <a href="/snapshots">Snapshot Review</a> to label detector outcomes (<code>person</code>/<code>no_person</code>).</li>
+              <li>Use <a href="/people">People Gallery</a> to rename identities, move misclassified samples, and delete bad samples.</li>
+              <li>No separate bootstrap step is required for normal operation.</li>
+            </ul>
+          </div>
 
           <h2>6. Export Detector Training Dataset</h2>
           <pre>python scripts/export_detector_dataset.py \\

@@ -69,13 +69,7 @@ TELEGRAM_CHAT_ID=
 STATUS_REPORT_INTERVAL_HOURS=12
 ```
 
-4. Optional: bootstrap face DB from existing snapshots.
-
-```bash
-python scripts/bootstrap_face_db.py --snapshot-dir data/snapshots --db-path data/faces.db
-```
-
-5. Run:
+4. Run:
 
 ```bash
 ./run.sh
