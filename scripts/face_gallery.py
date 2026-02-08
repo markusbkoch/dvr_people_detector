@@ -632,6 +632,7 @@ python main.py</pre>
 
               let idx = 0;
               const selected = new Set();
+              let rangeAnchorIndex = null;
 
               function refreshSelectionUi() {{
                 thumbs.forEach((el) => {{
@@ -667,13 +668,22 @@ python main.py</pre>
                 activate(i);
                 const source = btn.dataset.source || '';
                 if (!source) return;
-                if (ev.metaKey || ev.ctrlKey || ev.shiftKey) {{
+
+                if (ev.shiftKey && rangeAnchorIndex !== null) {{
+                  const from = Math.min(rangeAnchorIndex, i);
+                  const to = Math.max(rangeAnchorIndex, i);
+                  for (let j = from; j <= to; j += 1) {{
+                    const rangeSource = thumbs[j].dataset.source || '';
+                    if (rangeSource) selected.add(rangeSource);
+                  }}
+                }} else if (ev.metaKey || ev.ctrlKey) {{
                   if (selected.has(source)) selected.delete(source);
                   else selected.add(source);
                 }} else {{
                   if (selected.has(source)) selected.delete(source);
                   else selected.add(source);
                 }}
+                rangeAnchorIndex = i;
                 refreshSelectionUi();
               }}));
 
