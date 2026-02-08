@@ -7,6 +7,7 @@ import html
 import re
 import sqlite3
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
@@ -18,6 +19,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.face_rules import FaceEmbeddingEngine
+from app.camera import RtspCamera
+from app.config import CameraConfig, build_camera_map, load_settings
 
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -38,6 +41,7 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
 
     db_path: Path = Path("data/faces.db")
     snapshot_dir: Path = Path("data/snapshots")
+    camera_map: dict[int, CameraConfig] = {}
 
     def _connect(self) -> sqlite3.Connection:
         """Open SQLite connection and ensure required tables exist."""
@@ -223,6 +227,10 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
               <div class="title">People Gallery</div>
               <div class="sub">{person_count} people · {face_sample_count} face samples</div>
             </a>
+            <a class="card" href="/live">
+              <div class="title">Live RTSP</div>
+              <div class="sub">{len(self.camera_map)} camera feeds in browser</div>
+            </a>
             <a class="card" href="/guide">
               <div class="title">User Guide</div>
               <div class="sub">System setup, parameters, review workflow and training export</div>
@@ -231,6 +239,84 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
         </body>
         </html>
         """
+
+    def _render_live(self) -> str:
+        """Render browser page with live MJPEG streams proxied from RTSP feeds."""
+        cards = []
+        for channel_id in sorted(self.camera_map):
+            camera = self.camera_map[channel_id]
+            stream_src = f"/live/stream?channel={channel_id}"
+            cards.append(
+                f"""
+                <section class="card">
+                  <div class="title">{html.escape(camera.name)} <span class="sub">({channel_id})</span></div>
+                  <img src="{stream_src}" alt="live {html.escape(camera.name)}" loading="lazy" />
+                </section>
+                """
+            )
+        return f"""
+        <html>
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>Live RTSP</title>
+          <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; background: #f6f7f9; color: #111; }}
+            a {{ color: #2563eb; text-decoration: none; }}
+            .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; }}
+            .card {{ background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px; }}
+            .title {{ font-weight: 700; margin-bottom: 8px; }}
+            .sub {{ font-weight: 400; color: #555; }}
+            img {{ width: 100%; height: auto; background: #111; border-radius: 8px; }}
+          </style>
+        </head>
+        <body>
+          <p><a href="/">← Home</a> · <a href="/snapshots">Snapshot Review</a> · <a href="/people">People Gallery</a></p>
+          <h1>Live RTSP</h1>
+          <p>Feeds are proxied as MJPEG for browser compatibility.</p>
+          <div class="grid">{''.join(cards) if cards else '<p>No cameras configured.</p>'}</div>
+        </body>
+        </html>
+        """
+
+    def _send_mjpeg_stream(self, channel_id: int) -> None:
+        """Stream one RTSP feed as MJPEG multipart response."""
+        camera = self.camera_map.get(channel_id)
+        if camera is None:
+            self.send_error(404, "Unknown camera channel")
+            return
+
+        client = RtspCamera(camera=camera, reconnect_seconds=1.0, rtsp_transport="tcp")
+        boundary = "frame"
+        self.send_response(200)
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Connection", "close")
+        self.send_header("Content-Type", f"multipart/x-mixed-replace; boundary={boundary}")
+        self.end_headers()
+
+        try:
+            while True:
+                packet = client.read()
+                if packet is None:
+                    time.sleep(0.05)
+                    continue
+
+                ok, encoded = cv2.imencode(".jpg", packet.frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+                if not ok:
+                    continue
+                payload = encoded.tobytes()
+                try:
+                    self.wfile.write(f"--{boundary}\r\n".encode("utf-8"))
+                    self.wfile.write(b"Content-Type: image/jpeg\r\n")
+                    self.wfile.write(f"Content-Length: {len(payload)}\r\n\r\n".encode("utf-8"))
+                    self.wfile.write(payload)
+                    self.wfile.write(b"\r\n")
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    break
+        finally:
+            client.release()
 
     def _render_guide(self) -> str:
         """Render HTML user guide for surveillance and review workflows."""
@@ -934,6 +1020,19 @@ python main.py</pre>
             self._send_html(self._render_guide())
             return
 
+        if parsed.path == "/live":
+            self._send_html(self._render_live())
+            return
+
+        if parsed.path == "/live/stream":
+            query = parse_qs(parsed.query)
+            channel_raw = (query.get("channel", [""])[0] or "").strip()
+            if not channel_raw.isdigit():
+                self.send_error(400, "Missing or invalid channel")
+                return
+            self._send_mjpeg_stream(int(channel_raw))
+            return
+
         if parsed.path == "/snapshots":
             self._send_html(self._render_snapshots())
             return
@@ -1167,6 +1266,12 @@ def main() -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     FaceGalleryHandler.db_path = db_path
     FaceGalleryHandler.snapshot_dir = Path(args.snapshot_dir)
+    try:
+        settings = load_settings(".secrets")
+        FaceGalleryHandler.camera_map = build_camera_map(settings)
+    except Exception as exc:
+        print(f"Warning: live RTSP page disabled ({exc})")
+        FaceGalleryHandler.camera_map = {}
 
     server = ThreadingHTTPServer((args.host, args.port), FaceGalleryHandler)
     print(f"Gallery running on http://{args.host}:{args.port}")
