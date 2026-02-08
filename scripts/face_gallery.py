@@ -385,6 +385,7 @@ python main.py</pre>
             <tr><td><code>CAPTURE_MODE</code></td><td><code>isapi</code></td><td><code>isapi</code> or <code>rtsp</code>.</td></tr>
             <tr><td><code>PERSON_TRACKER</code></td><td><code>bytetrack</code></td><td>RTSP tracker backend: <code>bytetrack</code>, <code>botsort</code>, or <code>none</code>.</td></tr>
             <tr><td><code>PERSON_CONFIDENCE_THRESHOLD</code></td><td><code>0.65</code></td><td>Minimum confidence for person detection.</td></tr>
+            <tr><td><code>LOW_CONF_LOG_MIN_CONFIDENCE</code></td><td><code>0.05</code></td><td>Minimum confidence for low-confidence suppression log lines.</td></tr>
             <tr><td><code>PERSON_MIN_BOX_AREA_PX</code></td><td><code>0</code></td><td>Minimum person box area in pixels. Set <code>0</code> to disable.</td></tr>
             <tr><td><code>PERSON_MIN_MOVEMENT_PX</code></td><td><code>0</code></td><td>Minimum person-box center movement across confirmation window. Set <code>0</code> to disable.</td></tr>
             <tr><td><code>DETECTION_CONFIRMATION_FRAMES</code></td><td><code>3</code></td><td>Positive detection frames required before alert flow starts.</td></tr>

@@ -38,6 +38,7 @@ ISAPI_TIMEOUT_SECONDS=4
 
 PERIODIC_ALERT_SECONDS=-1
 PERSON_CONFIDENCE_THRESHOLD=0.65
+LOW_CONF_LOG_MIN_CONFIDENCE=0.05
 PERSON_MIN_BOX_AREA_PX=0
 PERSON_MIN_MOVEMENT_PX=0
 DETECTION_CONFIRMATION_FRAMES=3
@@ -229,6 +230,9 @@ Periodic status reports are enabled by default every 12 hours and can be configu
 - `PERSON_CONFIDENCE_THRESHOLD` (default: `0.65`)
   - Minimum confidence to treat class `person` as detected.
   - Lower value increases sensitivity and false positives.
+- `LOW_CONF_LOG_MIN_CONFIDENCE` (default: `0.05`)
+  - Minimum confidence required to emit "Low-confidence person detection suppressed" log lines.
+  - Helps reduce log noise from ultra-low-confidence tracker candidates.
 - `PERSON_MIN_BOX_AREA_PX` (default: `0`)
   - Minimum person bounding-box area in pixels to consider detection valid.
   - Set `0` to disable area filtering.

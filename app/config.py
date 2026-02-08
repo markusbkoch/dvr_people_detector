@@ -58,6 +58,7 @@ class Settings:
     frame_queue_size: int
     periodic_alert_seconds: float
     confidence_threshold: float
+    low_conf_log_min_confidence: float
     person_min_box_area_px: int
     person_min_movement_px: float
     detection_confirmation_frames: int
@@ -196,6 +197,7 @@ def load_settings(secrets_path: str = ".secrets") -> Settings:
         frame_queue_size=int(_get_env("FRAME_QUEUE_SIZE", file_values, "120")),
         periodic_alert_seconds=float(_get_env("PERIODIC_ALERT_SECONDS", file_values, "-1")),
         confidence_threshold=float(_get_env("PERSON_CONFIDENCE_THRESHOLD", file_values, "0.65")),
+        low_conf_log_min_confidence=float(_get_env("LOW_CONF_LOG_MIN_CONFIDENCE", file_values, "0.05")),
         person_min_box_area_px=int(_get_env("PERSON_MIN_BOX_AREA_PX", file_values, "0")),
         person_min_movement_px=float(_get_env("PERSON_MIN_MOVEMENT_PX", file_values, "0")),
         detection_confirmation_frames=int(_get_env("DETECTION_CONFIRMATION_FRAMES", file_values, "3")),

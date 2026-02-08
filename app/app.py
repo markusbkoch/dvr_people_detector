@@ -899,7 +899,7 @@ class SurveillanceApp:
         )
         if not has_person:
             self.pending_detection_by_camera.pop(camera_id, None)
-            if confidence > 0:
+            if confidence >= self.settings.low_conf_log_min_confidence:
                 box_text = "none"
                 if max_box is not None:
                     box_text = f"{max_box[0]},{max_box[1]},{max_box[2]},{max_box[3]}"
