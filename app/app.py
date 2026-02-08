@@ -208,6 +208,10 @@ class SurveillanceApp:
         self._active_yolo_model = str(self._active_model_path)
         self._model_update_lock = threading.Lock()
         self._model_update_thread: Optional[threading.Thread] = None
+        self._live_preview_lock = threading.Lock()
+        self._last_live_preview_by_camera: Dict[int, float] = {}
+        self._live_preview_frames: Dict[int, bytes] = {}
+        self._live_preview_seq: Dict[int, int] = {}
 
         self._ensure_managed_detector_models(configured_model=settings.yolo_model)
         self._init_feedback_store()
@@ -700,6 +704,36 @@ class SurveillanceApp:
         self.stats.inc_snapshots_saved()
         return output_path
 
+    def _publish_live_preview(self, camera_id: int, frame) -> None:
+        """Publish latest per-camera preview frame in memory for gallery live view."""
+        if self.settings.live_preview_fps <= 0:
+            return
+
+        interval = 1.0 / self.settings.live_preview_fps
+        now = monotonic()
+        with self._live_preview_lock:
+            last = self._last_live_preview_by_camera.get(camera_id, 0.0)
+            if now - last < interval:
+                return
+            self._last_live_preview_by_camera[camera_id] = now
+
+        ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+        if not ok:
+            return
+
+        payload = encoded.tobytes()
+        with self._live_preview_lock:
+            self._live_preview_frames[camera_id] = payload
+            self._live_preview_seq[camera_id] = self._live_preview_seq.get(camera_id, 0) + 1
+
+    def get_live_preview_frame(self, camera_id: int) -> Optional[tuple[int, bytes]]:
+        """Return latest `(sequence, jpeg_bytes)` for one camera, or `None`."""
+        with self._live_preview_lock:
+            payload = self._live_preview_frames.get(camera_id)
+            if payload is None:
+                return None
+            return self._live_preview_seq.get(camera_id, 0), payload
+
     def _camera_on_cooldown(self, channel_id: int) -> bool:
         """Return whether detection alerts are in cooldown for this camera."""
         last_alert = self.last_alert_by_camera.get(channel_id)
@@ -993,6 +1027,7 @@ class SurveillanceApp:
             self.last_periodic_by_camera[camera_id] = monotonic()
 
         self._handle_detection_flow(detector, face_detector, camera_id, frame_packet)
+        self._publish_live_preview(camera_id, frame_packet.frame)
 
     def _poll_camera(self, camera_id: int, camera: CameraClient) -> None:
         """Producer loop: read frames and push into bounded per-camera queue."""

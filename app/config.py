@@ -68,6 +68,8 @@ class Settings:
     burst_max_frames: int
     snapshot_target_aspect_ratio: str
     snapshot_dir: Path
+    live_preview_dir: Path
+    live_preview_fps: float
     face_db_path: Path
     face_match_threshold: float
     face_min_samples: int
@@ -184,6 +186,7 @@ def load_settings(secrets_path: str = ".secrets") -> Settings:
         )
 
     snapshot_dir = Path(_get_env("SNAPSHOT_DIR", file_values, "data/snapshots"))
+    live_preview_dir = Path(_get_env("LIVE_PREVIEW_DIR", file_values, "data/live_frames"))
 
     return Settings(
         dvr_username=dvr_username,
@@ -209,6 +212,8 @@ def load_settings(secrets_path: str = ".secrets") -> Settings:
         burst_max_frames=int(_get_env("BURST_MAX_FRAMES", file_values, "12")),
         snapshot_target_aspect_ratio=_get_env("SNAPSHOT_TARGET_ASPECT_RATIO", file_values, "16:9"),
         snapshot_dir=snapshot_dir,
+        live_preview_dir=live_preview_dir,
+        live_preview_fps=float(_get_env("LIVE_PREVIEW_FPS", file_values, "4.0")),
         face_db_path=Path(_get_env("FACE_DB_PATH", file_values, "data/faces.db")),
         face_match_threshold=float(_get_env("FACE_MATCH_THRESHOLD", file_values, "0.80")),
         face_min_samples=int(_get_env("FACE_MIN_SAMPLES", file_values, "3")),

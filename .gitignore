@@ -36,6 +36,9 @@ data/snapshots/*
 data/snapshots_denoised_test/*
 !data/snapshots_denoised_test/.gitkeep
 
+data/live_frames/*
+!data/live_frames/.gitkeep
+
 data/detector_dataset/
 data/detector_training/
 

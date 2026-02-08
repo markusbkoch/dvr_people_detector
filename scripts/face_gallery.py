@@ -7,9 +7,11 @@ import html
 import re
 import sqlite3
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Callable, Optional
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import cv2
@@ -19,9 +21,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.face_rules import FaceEmbeddingEngine
-from app.camera import RtspCamera
 from app.config import CameraConfig, Settings, build_camera_map, load_settings
-from app.detector import PersonDetector
 
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -32,6 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Local face DB gallery viewer")
     parser.add_argument("--db-path", default="data/faces.db")
     parser.add_argument("--snapshot-dir", default="data/snapshots")
+    parser.add_argument("--live-preview-dir", default="data/live_frames")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     return parser.parse_args()
@@ -42,6 +43,8 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
 
     db_path: Path = Path("data/faces.db")
     snapshot_dir: Path = Path("data/snapshots")
+    live_preview_dir: Path = Path("data/live_frames")
+    live_frame_provider: Optional[Callable[[int], Optional[tuple[int, bytes]]]] = None
     camera_map: dict[int, CameraConfig] = {}
     settings: Settings | None = None
 
@@ -230,7 +233,7 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
               <div class="sub">{person_count} people · {face_sample_count} face samples</div>
             </a>
             <a class="card" href="/live">
-              <div class="title">Live RTSP</div>
+              <div class="title">Live Feed</div>
               <div class="sub">{len(self.camera_map)} camera feeds in browser</div>
             </a>
             <a class="card" href="/guide">
@@ -243,7 +246,7 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
         """
 
     def _render_live(self) -> str:
-        """Render browser page with live MJPEG streams proxied from RTSP feeds."""
+        """Render browser page with live MJPEG streams from shared preview frames."""
         cards = []
         for channel_id in sorted(self.camera_map):
             camera = self.camera_map[channel_id]
@@ -261,7 +264,7 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>Live RTSP</title>
+          <title>Live Feed</title>
           <style>
             body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; background: #f6f7f9; color: #111; }}
             a {{ color: #2563eb; text-decoration: none; }}
@@ -274,30 +277,20 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
         </head>
         <body>
           <p><a href="/">← Home</a> · <a href="/snapshots">Snapshot Review</a> · <a href="/people">People Gallery</a></p>
-          <h1>Live RTSP</h1>
-          <p>Feeds are proxied as MJPEG for browser compatibility.</p>
+          <h1>Live Feed</h1>
+          <p>Feeds are served from the running surveillance process (or disk previews in standalone gallery mode).</p>
           <div class="grid">{''.join(cards) if cards else '<p>No cameras configured.</p>'}</div>
         </body>
         </html>
         """
 
     def _send_mjpeg_stream(self, channel_id: int) -> None:
-        """Stream one RTSP feed as MJPEG multipart response."""
+        """Stream one camera preview file as MJPEG multipart response."""
         camera = self.camera_map.get(channel_id)
         if camera is None:
             self.send_error(404, "Unknown camera channel")
             return
 
-        client = RtspCamera(camera=camera, reconnect_seconds=1.0, rtsp_transport="tcp")
-        detector: PersonDetector | None = None
-        ignored_boxes = []
-        if self.settings is not None:
-            ignored_boxes = self.settings.ignored_person_bboxes.get(channel_id, [])
-            detector = PersonDetector(
-                model_name=self.settings.yolo_model,
-                confidence_threshold=self.settings.confidence_threshold,
-                tracker_mode=(self.settings.person_tracker if self.settings.capture_mode == "rtsp" else "none"),
-            )
         boundary = "frame"
         self.send_response(200)
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
@@ -306,37 +299,52 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", f"multipart/x-mixed-replace; boundary={boundary}")
         self.end_headers()
 
-        try:
-            while True:
-                packet = client.read()
+        last_seq = -1
+        provider = self.live_frame_provider
+        frame_path = self.live_preview_dir / f"{channel_id}.jpg"
+        while True:
+            payload: bytes | None = None
+            if provider is not None:
+                packet = provider(channel_id)
                 if packet is None:
                     time.sleep(0.05)
                     continue
-
-                frame = packet.frame
-                if detector is not None:
-                    try:
-                        _, annotated, _, _, _ = detector.detect(frame.copy(), ignored_boxes=ignored_boxes)
-                        frame = annotated
-                    except Exception:
-                        # Keep feed alive even if annotation path fails.
-                        frame = packet.frame
-
-                ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
-                if not ok:
+                seq, payload = packet
+                if seq == last_seq:
+                    time.sleep(0.05)
                     continue
-                payload = encoded.tobytes()
+                last_seq = seq
+            else:
+                if not frame_path.exists():
+                    time.sleep(0.15)
+                    continue
+
                 try:
-                    self.wfile.write(f"--{boundary}\r\n".encode("utf-8"))
-                    self.wfile.write(b"Content-Type: image/jpeg\r\n")
-                    self.wfile.write(f"Content-Length: {len(payload)}\r\n\r\n".encode("utf-8"))
-                    self.wfile.write(payload)
-                    self.wfile.write(b"\r\n")
-                    self.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError):
-                    break
-        finally:
-            client.release()
+                    mtime_ns = frame_path.stat().st_mtime_ns
+                except OSError:
+                    time.sleep(0.05)
+                    continue
+
+                if mtime_ns == last_seq:
+                    time.sleep(0.05)
+                    continue
+
+                try:
+                    payload = frame_path.read_bytes()
+                except OSError:
+                    time.sleep(0.05)
+                    continue
+                last_seq = mtime_ns
+
+            try:
+                self.wfile.write(f"--{boundary}\r\n".encode("utf-8"))
+                self.wfile.write(b"Content-Type: image/jpeg\r\n")
+                self.wfile.write(f"Content-Length: {len(payload)}\r\n\r\n".encode("utf-8"))
+                self.wfile.write(payload)
+                self.wfile.write(b"\r\n")
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                break
 
     def _render_guide(self) -> str:
         """Render HTML user guide for surveillance and review workflows."""
@@ -370,10 +378,10 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
 
           <div class="card">
             <h2>1. Start The System</h2>
-            <p>Run the surveillance pipeline:</p>
+            <p>Run the surveillance pipeline (this also serves the gallery UI):</p>
             <pre>source .venv/bin/activate
 python main.py</pre>
-            <p>Run this gallery UI:</p>
+            <p>Optional standalone gallery mode:</p>
             <pre>python scripts/face_gallery.py --db-path data/faces.db --snapshot-dir data/snapshots --host 127.0.0.1 --port 8765</pre>
           </div>
 
@@ -401,6 +409,8 @@ python main.py</pre>
             <tr><td><code>SNAPSHOT_TARGET_ASPECT_RATIO</code></td><td><code>16:9</code></td><td>Optional aspect correction before saving snapshots.</td></tr>
             <tr><td><code>SNAPSHOT_DIR</code></td><td><code>data/snapshots</code></td><td>Where snapshots are saved.</td></tr>
             <tr><td><code>RTSP_TRANSPORT</code></td><td><code>tcp</code></td><td>RTSP transport mode for OpenCV/FFmpeg capture.</td></tr>
+            <tr><td><code>LIVE_PREVIEW_DIR</code></td><td><code>data/live_frames</code></td><td>Used only in standalone gallery mode, where live feed reads per-camera preview JPEGs from disk.</td></tr>
+            <tr><td><code>LIVE_PREVIEW_FPS</code></td><td><code>4.0</code></td><td>Max in-memory publish rate (per camera) for web live previews in <code>main.py</code>. Set <code>0</code> to disable.</td></tr>
             <tr><td><code>CAMERA_RECONNECT_SECONDS</code></td><td><code>5</code></td><td>Delay before retrying failed camera reads.</td></tr>
             <tr><td><code>ISAPI_AUTH_MODE</code></td><td><code>auto</code></td><td>ISAPI auth strategy (<code>auto|digest|basic</code>).</td></tr>
             <tr><td><code>ISAPI_TIMEOUT_SECONDS</code></td><td><code>4</code></td><td>ISAPI HTTP timeout per request.</td></tr>
@@ -1281,26 +1291,83 @@ python main.py</pre>
         self.send_error(404, "Not found")
 
 
+def _load_gallery_settings() -> tuple[dict[int, CameraConfig], Settings | None]:
+    """Load optional app settings/camera map for live page metadata."""
+    try:
+        settings = load_settings(".secrets")
+        return build_camera_map(settings), settings
+    except Exception as exc:
+        print(f"Warning: live feed page disabled ({exc})")
+        return {}, None
+
+
+def create_gallery_server(
+    *,
+    host: str,
+    port: int,
+    db_path: Path,
+    snapshot_dir: Path,
+    live_preview_dir: Path,
+    camera_map: dict[int, CameraConfig],
+    settings: Settings | None,
+    live_frame_provider: Optional[Callable[[int], Optional[tuple[int, bytes]]]] = None,
+) -> ThreadingHTTPServer:
+    """Create configured gallery HTTP server instance."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    FaceGalleryHandler.db_path = db_path
+    FaceGalleryHandler.snapshot_dir = snapshot_dir
+    FaceGalleryHandler.live_preview_dir = live_preview_dir
+    FaceGalleryHandler.camera_map = camera_map
+    FaceGalleryHandler.settings = settings
+    FaceGalleryHandler.live_frame_provider = live_frame_provider
+    return ThreadingHTTPServer((host, port), FaceGalleryHandler)
+
+
+def start_gallery_server(
+    *,
+    host: str,
+    port: int,
+    db_path: Path,
+    snapshot_dir: Path,
+    live_preview_dir: Path,
+    camera_map: dict[int, CameraConfig],
+    settings: Settings | None,
+    live_frame_provider: Optional[Callable[[int], Optional[tuple[int, bytes]]]] = None,
+) -> tuple[ThreadingHTTPServer, threading.Thread]:
+    """Create and start gallery server in a background thread."""
+    server = create_gallery_server(
+        host=host,
+        port=port,
+        db_path=db_path,
+        snapshot_dir=snapshot_dir,
+        live_preview_dir=live_preview_dir,
+        camera_map=camera_map,
+        settings=settings,
+        live_frame_provider=live_frame_provider,
+    )
+    thread = threading.Thread(target=server.serve_forever, name="face-gallery", daemon=True)
+    thread.start()
+    return server, thread
+
+
 def main() -> None:
     """Start threaded local HTTP server."""
     args = parse_args()
     db_path = Path(args.db_path)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    FaceGalleryHandler.db_path = db_path
-    FaceGalleryHandler.snapshot_dir = Path(args.snapshot_dir)
-    try:
-        settings = load_settings(".secrets")
-        FaceGalleryHandler.camera_map = build_camera_map(settings)
-        FaceGalleryHandler.settings = settings
-    except Exception as exc:
-        print(f"Warning: live RTSP page disabled ({exc})")
-        FaceGalleryHandler.camera_map = {}
-        FaceGalleryHandler.settings = None
-
-    server = ThreadingHTTPServer((args.host, args.port), FaceGalleryHandler)
+    camera_map, settings = _load_gallery_settings()
+    server = create_gallery_server(
+        host=args.host,
+        port=args.port,
+        db_path=db_path,
+        snapshot_dir=Path(args.snapshot_dir),
+        live_preview_dir=Path(args.live_preview_dir),
+        camera_map=camera_map,
+        settings=settings,
+        live_frame_provider=None,
+    )
     print(f"Gallery running on http://{args.host}:{args.port}")
     print(f"DB: {db_path}")
-    print(f"Snapshots: {FaceGalleryHandler.snapshot_dir}")
+    print(f"Snapshots: {Path(args.snapshot_dir)}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
