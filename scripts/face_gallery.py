@@ -278,8 +278,13 @@ python main.py</pre>
             <tr><td><code>CAMERA_CHANNELS</code></td><td><code>(required)</code></td><td>Runtime channel map in <code>channel_id:name</code> format separated by <code>;</code>.</td></tr>
             <tr><td><code>CAPTURE_MODE</code></td><td><code>isapi</code></td><td><code>isapi</code> or <code>rtsp</code>.</td></tr>
             <tr><td><code>PERSON_CONFIDENCE_THRESHOLD</code></td><td><code>0.65</code></td><td>Minimum confidence for person detection.</td></tr>
+            <tr><td><code>PERSON_MIN_BOX_AREA_PX</code></td><td><code>0</code></td><td>Minimum person box area in pixels. Set <code>0</code> to disable.</td></tr>
+            <tr><td><code>PERSON_MIN_MOVEMENT_PX</code></td><td><code>0</code></td><td>Minimum person-box center movement across confirmation window. Set <code>0</code> to disable.</td></tr>
+            <tr><td><code>DETECTION_CONFIRMATION_FRAMES</code></td><td><code>3</code></td><td>Positive detection frames required before alert flow starts.</td></tr>
+            <tr><td><code>DETECTION_CONFIRMATION_WINDOW_SECONDS</code></td><td><code>1.5</code></td><td>Max gap between confirmation hits for one camera.</td></tr>
             <tr><td><code>IGNORED_PERSON_BBOXES</code></td><td><code>(empty)</code></td><td>Optional camera ignore zones, format <code>channel:x1,y1,x2,y2;channel:x1,y1,x2,y2|x1,y1,x2,y2</code>.</td></tr>
             <tr><td><code>DETECT_EVERY_SECONDS</code></td><td><code>1.2</code></td><td>Polling interval per camera.</td></tr>
+            <tr><td><code>RTSP_DETECTION_FPS</code></td><td><code>6.0</code></td><td>Target per-camera inference rate in RTSP mode (continuous ingest + sampled detection).</td></tr>
             <tr><td><code>ALERT_COOLDOWN_SECONDS</code></td><td><code>40</code></td><td>Detection alert cooldown per camera.</td></tr>
             <tr><td><code>PERIODIC_ALERT_SECONDS</code></td><td><code>-1</code></td><td><code>-1</code> means detect-only alerts; positive values trigger periodic snapshots.</td></tr>
             <tr><td><code>BURST_CAPTURE_SECONDS</code></td><td><code>4.0</code></td><td>Burst time window used to select better frames before alerting.</td></tr>

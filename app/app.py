@@ -54,6 +54,17 @@ class BurstState:
     trigger_annotated_frame: any
 
 
+@dataclass
+class PendingDetectionState:
+    """Short-lived state for temporal person-confirmation filtering."""
+
+    first_seen_at: float
+    last_seen_at: float
+    hit_count: int
+    last_box: Optional[tuple[int, int, int, int]]
+    max_movement_px: float
+
+
 class RuntimeStats:
     """Thread-safe counters used for telemetry and `/status` responses."""
 
@@ -180,6 +191,7 @@ class SurveillanceApp:
         self.last_alert_by_camera: Dict[int, float] = {}
         self.last_periodic_by_camera: Dict[int, float] = {}
         self.burst_by_camera: Dict[int, BurstState] = {}
+        self.pending_detection_by_camera: Dict[int, PendingDetectionState] = {}
         self.status_report_interval_seconds = max(0.0, float(settings.status_report_interval_hours) * 3600.0)
         self._status_interval_lock = threading.Lock()
         self._feedback_lock = threading.Lock()
@@ -704,6 +716,26 @@ class SurveillanceApp:
             return True
         return monotonic() - last >= interval
 
+    @staticmethod
+    def _box_area(box: tuple[int, int, int, int]) -> int:
+        """Return pixel area for one XYXY box."""
+        x1, y1, x2, y2 = box
+        return max(0, x2 - x1) * max(0, y2 - y1)
+
+    @staticmethod
+    def _box_center_distance_px(
+        a: tuple[int, int, int, int],
+        b: tuple[int, int, int, int],
+    ) -> float:
+        """Return center-point Euclidean distance between two boxes in pixels."""
+        ax = (a[0] + a[2]) / 2.0
+        ay = (a[1] + a[3]) / 2.0
+        bx = (b[0] + b[2]) / 2.0
+        by = (b[1] + b[3]) / 2.0
+        dx = ax - bx
+        dy = ay - by
+        return (dx * dx + dy * dy) ** 0.5
+
     def _score_face_quality(self, face_detector: cv2.CascadeClassifier, frame) -> tuple[float, int]:
         """Score frame quality for face usability (size + sharpness heuristic)."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -856,6 +888,7 @@ class SurveillanceApp:
             return
 
         if self._camera_on_cooldown(camera_id):
+            self.pending_detection_by_camera.pop(camera_id, None)
             return
 
         ignored_boxes = self.settings.ignored_person_bboxes.get(camera_id, [])
@@ -864,6 +897,7 @@ class SurveillanceApp:
             ignored_boxes=ignored_boxes,
         )
         if not has_person:
+            self.pending_detection_by_camera.pop(camera_id, None)
             if confidence > 0:
                 box_text = "none"
                 if max_box is not None:
@@ -878,6 +912,60 @@ class SurveillanceApp:
                     datetime.fromtimestamp(frame_packet.captured_at).isoformat(timespec="seconds"),
                 )
             return
+
+        if max_box is None:
+            self.pending_detection_by_camera.pop(camera_id, None)
+            return
+
+        if self.settings.person_min_box_area_px > 0:
+            box_area = self._box_area(max_box)
+            if box_area < self.settings.person_min_box_area_px:
+                self.pending_detection_by_camera.pop(camera_id, None)
+                logger.info(
+                    "Person detection rejected by min area | camera=%s | channel=%s | area=%d | min_area=%d | bbox_xyxy=%s",
+                    frame_packet.camera.name,
+                    frame_packet.camera.channel_key,
+                    box_area,
+                    self.settings.person_min_box_area_px,
+                    f"{max_box[0]},{max_box[1]},{max_box[2]},{max_box[3]}",
+                )
+                return
+
+        now = monotonic()
+        pending = self.pending_detection_by_camera.get(camera_id)
+        if pending is None or (now - pending.last_seen_at) > self.settings.detection_confirmation_window_seconds:
+            pending = PendingDetectionState(
+                first_seen_at=now,
+                last_seen_at=now,
+                hit_count=1,
+                last_box=max_box,
+                max_movement_px=0.0,
+            )
+        else:
+            movement = 0.0
+            if pending.last_box is not None:
+                movement = self._box_center_distance_px(pending.last_box, max_box)
+            pending.max_movement_px = max(pending.max_movement_px, movement)
+            pending.last_box = max_box
+            pending.last_seen_at = now
+            pending.hit_count += 1
+
+        self.pending_detection_by_camera[camera_id] = pending
+
+        if pending.hit_count < max(1, self.settings.detection_confirmation_frames):
+            return
+        if self.settings.person_min_movement_px > 0 and pending.max_movement_px < self.settings.person_min_movement_px:
+            logger.info(
+                "Person detection rejected by min movement | camera=%s | channel=%s | movement=%.2f | min_movement=%.2f",
+                frame_packet.camera.name,
+                frame_packet.camera.channel_key,
+                pending.max_movement_px,
+                self.settings.person_min_movement_px,
+            )
+            self.pending_detection_by_camera.pop(camera_id, None)
+            return
+
+        self.pending_detection_by_camera.pop(camera_id, None)
         self.stats.record_person_detection(confidence=confidence)
 
         self._start_burst(
@@ -905,6 +993,7 @@ class SurveillanceApp:
     def _poll_camera(self, camera_id: int, camera: CameraClient) -> None:
         """Producer loop: read frames and push into bounded per-camera queue."""
         frame_queue = self.frame_queues[camera_id]
+        is_rtsp = isinstance(camera, RtspCamera)
         while not self.stop_event.is_set():
             frame_packet = camera.read()
             if frame_packet is not None:
@@ -921,18 +1010,28 @@ class SurveillanceApp:
                         frame_queue.put(frame_packet, timeout=0.2)
                     except queue.Full:
                         pass
-            time.sleep(self.settings.detect_every_seconds)
+            if is_rtsp:
+                # RTSP mode uses continuous ingest. Keep loop responsive without
+                # introducing fixed polling sleeps that drop temporal detail.
+                self.stop_event.wait(timeout=0.001)
+            else:
+                self.stop_event.wait(timeout=self.settings.detect_every_seconds)
 
     def _process_camera(self, camera_id: int) -> None:
         """Consumer loop: run inference pipeline for one camera queue."""
         detector: PersonDetector | None = None
         detector_generation = -1
+        last_processed_at = 0.0
+        rtsp_interval = 0.0
+        if self.settings.rtsp_detection_fps > 0:
+            rtsp_interval = 1.0 / self.settings.rtsp_detection_fps
         face_detector = cv2.CascadeClassifier(
             cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
         )
 
         frame_queue = self.frame_queues[camera_id]
         camera_name = self.cameras[camera_id].camera.name
+        is_rtsp_mode = self.settings.capture_mode == "rtsp"
 
         while not self.stop_event.is_set():
             current_generation = self._current_model_generation()
@@ -963,6 +1062,12 @@ class SurveillanceApp:
                 frame_packet = frame_queue.get(timeout=0.25)
             except queue.Empty:
                 continue
+
+            if is_rtsp_mode and rtsp_interval > 0:
+                now = monotonic()
+                if now - last_processed_at < rtsp_interval:
+                    continue
+                last_processed_at = now
 
             try:
                 assert detector is not None

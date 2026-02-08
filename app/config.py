@@ -54,9 +54,14 @@ class Settings:
     telegram_chat_id: str
     status_report_interval_hours: float
     detect_every_seconds: float
+    rtsp_detection_fps: float
     frame_queue_size: int
     periodic_alert_seconds: float
     confidence_threshold: float
+    person_min_box_area_px: int
+    person_min_movement_px: float
+    detection_confirmation_frames: int
+    detection_confirmation_window_seconds: float
     alert_cooldown_seconds: int
     burst_capture_seconds: float
     burst_max_frames: int
@@ -186,9 +191,16 @@ def load_settings(secrets_path: str = ".secrets") -> Settings:
         telegram_chat_id=_get_env("TELEGRAM_CHAT_ID", file_values),
         status_report_interval_hours=float(_get_env("STATUS_REPORT_INTERVAL_HOURS", file_values, "12")),
         detect_every_seconds=float(_get_env("DETECT_EVERY_SECONDS", file_values, "1.2")),
+        rtsp_detection_fps=float(_get_env("RTSP_DETECTION_FPS", file_values, "6.0")),
         frame_queue_size=int(_get_env("FRAME_QUEUE_SIZE", file_values, "120")),
         periodic_alert_seconds=float(_get_env("PERIODIC_ALERT_SECONDS", file_values, "-1")),
         confidence_threshold=float(_get_env("PERSON_CONFIDENCE_THRESHOLD", file_values, "0.65")),
+        person_min_box_area_px=int(_get_env("PERSON_MIN_BOX_AREA_PX", file_values, "0")),
+        person_min_movement_px=float(_get_env("PERSON_MIN_MOVEMENT_PX", file_values, "0")),
+        detection_confirmation_frames=int(_get_env("DETECTION_CONFIRMATION_FRAMES", file_values, "3")),
+        detection_confirmation_window_seconds=float(
+            _get_env("DETECTION_CONFIRMATION_WINDOW_SECONDS", file_values, "1.5")
+        ),
         alert_cooldown_seconds=int(_get_env("ALERT_COOLDOWN_SECONDS", file_values, "40")),
         burst_capture_seconds=float(_get_env("BURST_CAPTURE_SECONDS", file_values, "4.0")),
         burst_max_frames=int(_get_env("BURST_MAX_FRAMES", file_values, "12")),

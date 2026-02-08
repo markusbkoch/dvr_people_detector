@@ -47,7 +47,9 @@ class RtspCamera:
 
     def _open(self) -> None:
         """Open the RTSP capture handle with transport-specific FFmpeg options."""
-        options = f"rtsp_transport;{self.rtsp_transport}|fflags;nobuffer"
+        # Prefer decode stability over ultra-low-latency buffering, which can
+        # increase HEVC reference-frame decode errors on noisy links.
+        options = f"rtsp_transport;{self.rtsp_transport}"
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = options
         try:
             cv2.setLogLevel(2)
