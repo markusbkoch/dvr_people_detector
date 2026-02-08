@@ -12,7 +12,7 @@ Configured channel IDs:
 
 Capture endpoints used by the app:
 
-- RTSP: `rtsp://<DVR_USERNAME>:<DVR_PASSWORD>@<DVR_IP>:554/Streaming/Channels/<CHANNEL_ID>01`
+- RTSP: `rtsp://<DVR_USERNAME>:<DVR_PASSWORD>@<DVR_IP>:554/Streaming/Channels/<CHANNEL_ID>`
 - ISAPI snapshot: `http://<DVR_IP>/ISAPI/Streaming/channels/<CHANNEL_ID>/picture`
 
 ## Setup

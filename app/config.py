@@ -216,7 +216,7 @@ def build_camera_map(settings: Settings) -> Dict[int, CameraConfig]:
     for channel_id, name in channels.items():
         rtsp_url = (
             f"rtsp://{settings.dvr_username}:{settings.dvr_password}@{settings.dvr_ip}:554/"
-            f"Streaming/Channels/{channel_id}01"
+            f"Streaming/Channels/{channel_id}"
         )
         isapi_url = f"http://{settings.dvr_ip}/ISAPI/Streaming/channels/{channel_id}/picture"
         camera_map[channel_id] = CameraConfig(
