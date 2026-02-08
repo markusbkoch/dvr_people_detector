@@ -53,7 +53,6 @@ FRAME_QUEUE_SIZE=120
 
 SNAPSHOT_TARGET_ASPECT_RATIO=16:9
 SNAPSHOT_DIR=data/snapshots
-LIVE_PREVIEW_DIR=data/live_frames
 LIVE_PREVIEW_FPS=4.0
 
 FACE_DB_PATH=data/faces.db
@@ -114,12 +113,6 @@ Then open `http://127.0.0.1:8765`.
   - optionally assign a `person_id/name` when a face is visible
   - bulk select multiple thumbnails and apply `Person` / `No Person` / `Clear Label` in one action
 - `People Gallery` remains available for managing clustered face samples.
-
-Optional standalone gallery mode remains available:
-
-```bash
-python scripts/face_gallery.py --db-path data/faces.db --snapshot-dir data/snapshots --live-preview-dir data/live_frames --host 127.0.0.1 --port 8765
-```
 
 ## Detector Feedback Export (YOLO)
 
@@ -308,8 +301,6 @@ Periodic status reports are enabled by default every 12 hours and can be configu
 
 - `SNAPSHOT_DIR` (default: `data/snapshots`)
   - Directory where snapshots are written.
-- `LIVE_PREVIEW_DIR` (default: `data/live_frames`)
-  - Used only in standalone gallery mode (`scripts/face_gallery.py`) where live feed falls back to reading preview JPEG files from disk.
 - `LIVE_PREVIEW_FPS` (default: `4.0`)
   - Max publish rate per camera for in-memory web live previews in `main.py`.
   - Set `0` to disable live-preview publishing entirely.

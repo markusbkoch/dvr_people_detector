@@ -7,7 +7,7 @@ from pathlib import Path
 
 from app.app import SurveillanceApp
 from app.config import build_camera_map, load_settings
-from scripts.face_gallery import start_gallery_server
+from app.web_ui import start_gallery_server
 
 
 def setup_logging() -> None:
@@ -52,7 +52,6 @@ def main() -> None:
         port=gallery_port,
         db_path=gallery_db_path,
         snapshot_dir=gallery_snapshot_dir,
-        live_preview_dir=settings.live_preview_dir,
         camera_map=build_camera_map(settings),
         settings=settings,
         live_frame_provider=app.get_live_preview_frame,

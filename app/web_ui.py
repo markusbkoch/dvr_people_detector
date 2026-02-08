@@ -2,11 +2,9 @@ from __future__ import annotations
 
 """Local web UI for reviewing snapshots and managing face/person datasets."""
 
-import argparse
 import html
 import re
 import sqlite3
-import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,25 +15,12 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 import cv2
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 from app.face_rules import FaceEmbeddingEngine
-from app.config import CameraConfig, Settings, build_camera_map, load_settings
+from app.config import CameraConfig, Settings
 
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
-
-
-def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments for gallery server."""
-    parser = argparse.ArgumentParser(description="Local face DB gallery viewer")
-    parser.add_argument("--db-path", default="data/faces.db")
-    parser.add_argument("--snapshot-dir", default="data/snapshots")
-    parser.add_argument("--live-preview-dir", default="data/live_frames")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8765)
-    return parser.parse_args()
 
 
 class FaceGalleryHandler(BaseHTTPRequestHandler):
@@ -43,7 +28,6 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
 
     db_path: Path = Path("data/faces.db")
     snapshot_dir: Path = Path("data/snapshots")
-    live_preview_dir: Path = Path("data/live_frames")
     live_frame_provider: Optional[Callable[[int], Optional[tuple[int, bytes]]]] = None
     camera_map: dict[int, CameraConfig] = {}
     settings: Settings | None = None
@@ -278,14 +262,14 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
         <body>
           <p><a href="/">← Home</a> · <a href="/snapshots">Snapshot Review</a> · <a href="/people">People Gallery</a></p>
           <h1>Live Feed</h1>
-          <p>Feeds are served from the running surveillance process (or disk previews in standalone gallery mode).</p>
+          <p>Feeds are served from the running surveillance process.</p>
           <div class="grid">{''.join(cards) if cards else '<p>No cameras configured.</p>'}</div>
         </body>
         </html>
         """
 
     def _send_mjpeg_stream(self, channel_id: int) -> None:
-        """Stream one camera preview file as MJPEG multipart response."""
+        """Stream one camera preview as MJPEG multipart response."""
         camera = self.camera_map.get(channel_id)
         if camera is None:
             self.send_error(404, "Unknown camera channel")
@@ -301,40 +285,19 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
 
         last_seq = -1
         provider = self.live_frame_provider
-        frame_path = self.live_preview_dir / f"{channel_id}.jpg"
+        if provider is None:
+            self.send_error(503, "Live frame provider unavailable")
+            return
         while True:
-            payload: bytes | None = None
-            if provider is not None:
-                packet = provider(channel_id)
-                if packet is None:
-                    time.sleep(0.05)
-                    continue
-                seq, payload = packet
-                if seq == last_seq:
-                    time.sleep(0.05)
-                    continue
-                last_seq = seq
-            else:
-                if not frame_path.exists():
-                    time.sleep(0.15)
-                    continue
-
-                try:
-                    mtime_ns = frame_path.stat().st_mtime_ns
-                except OSError:
-                    time.sleep(0.05)
-                    continue
-
-                if mtime_ns == last_seq:
-                    time.sleep(0.05)
-                    continue
-
-                try:
-                    payload = frame_path.read_bytes()
-                except OSError:
-                    time.sleep(0.05)
-                    continue
-                last_seq = mtime_ns
+            packet = provider(channel_id)
+            if packet is None:
+                time.sleep(0.05)
+                continue
+            seq, payload = packet
+            if seq == last_seq:
+                time.sleep(0.05)
+                continue
+            last_seq = seq
 
             try:
                 self.wfile.write(f"--{boundary}\r\n".encode("utf-8"))
@@ -381,8 +344,6 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
             <p>Run the surveillance pipeline (this also serves the gallery UI):</p>
             <pre>source .venv/bin/activate
 python main.py</pre>
-            <p>Optional standalone gallery mode:</p>
-            <pre>python scripts/face_gallery.py --db-path data/faces.db --snapshot-dir data/snapshots --host 127.0.0.1 --port 8765</pre>
           </div>
 
           <h2>2. Important Parameters (.secrets)</h2>
@@ -409,7 +370,6 @@ python main.py</pre>
             <tr><td><code>SNAPSHOT_TARGET_ASPECT_RATIO</code></td><td><code>16:9</code></td><td>Optional aspect correction before saving snapshots.</td></tr>
             <tr><td><code>SNAPSHOT_DIR</code></td><td><code>data/snapshots</code></td><td>Where snapshots are saved.</td></tr>
             <tr><td><code>RTSP_TRANSPORT</code></td><td><code>tcp</code></td><td>RTSP transport mode for OpenCV/FFmpeg capture.</td></tr>
-            <tr><td><code>LIVE_PREVIEW_DIR</code></td><td><code>data/live_frames</code></td><td>Used only in standalone gallery mode, where live feed reads per-camera preview JPEGs from disk.</td></tr>
             <tr><td><code>LIVE_PREVIEW_FPS</code></td><td><code>4.0</code></td><td>Max in-memory publish rate (per camera) for web live previews in <code>main.py</code>. Set <code>0</code> to disable.</td></tr>
             <tr><td><code>CAMERA_RECONNECT_SECONDS</code></td><td><code>5</code></td><td>Delay before retrying failed camera reads.</td></tr>
             <tr><td><code>ISAPI_AUTH_MODE</code></td><td><code>auto</code></td><td>ISAPI auth strategy (<code>auto|digest|basic</code>).</td></tr>
@@ -1291,32 +1251,20 @@ python main.py</pre>
         self.send_error(404, "Not found")
 
 
-def _load_gallery_settings() -> tuple[dict[int, CameraConfig], Settings | None]:
-    """Load optional app settings/camera map for live page metadata."""
-    try:
-        settings = load_settings(".secrets")
-        return build_camera_map(settings), settings
-    except Exception as exc:
-        print(f"Warning: live feed page disabled ({exc})")
-        return {}, None
-
-
 def create_gallery_server(
     *,
     host: str,
     port: int,
     db_path: Path,
     snapshot_dir: Path,
-    live_preview_dir: Path,
     camera_map: dict[int, CameraConfig],
     settings: Settings | None,
-    live_frame_provider: Optional[Callable[[int], Optional[tuple[int, bytes]]]] = None,
+    live_frame_provider: Callable[[int], Optional[tuple[int, bytes]]],
 ) -> ThreadingHTTPServer:
     """Create configured gallery HTTP server instance."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     FaceGalleryHandler.db_path = db_path
     FaceGalleryHandler.snapshot_dir = snapshot_dir
-    FaceGalleryHandler.live_preview_dir = live_preview_dir
     FaceGalleryHandler.camera_map = camera_map
     FaceGalleryHandler.settings = settings
     FaceGalleryHandler.live_frame_provider = live_frame_provider
@@ -1329,10 +1277,9 @@ def start_gallery_server(
     port: int,
     db_path: Path,
     snapshot_dir: Path,
-    live_preview_dir: Path,
     camera_map: dict[int, CameraConfig],
     settings: Settings | None,
-    live_frame_provider: Optional[Callable[[int], Optional[tuple[int, bytes]]]] = None,
+    live_frame_provider: Callable[[int], Optional[tuple[int, bytes]]],
 ) -> tuple[ThreadingHTTPServer, threading.Thread]:
     """Create and start gallery server in a background thread."""
     server = create_gallery_server(
@@ -1340,7 +1287,6 @@ def start_gallery_server(
         port=port,
         db_path=db_path,
         snapshot_dir=snapshot_dir,
-        live_preview_dir=live_preview_dir,
         camera_map=camera_map,
         settings=settings,
         live_frame_provider=live_frame_provider,
@@ -1348,33 +1294,3 @@ def start_gallery_server(
     thread = threading.Thread(target=server.serve_forever, name="face-gallery", daemon=True)
     thread.start()
     return server, thread
-
-
-def main() -> None:
-    """Start threaded local HTTP server."""
-    args = parse_args()
-    db_path = Path(args.db_path)
-    camera_map, settings = _load_gallery_settings()
-    server = create_gallery_server(
-        host=args.host,
-        port=args.port,
-        db_path=db_path,
-        snapshot_dir=Path(args.snapshot_dir),
-        live_preview_dir=Path(args.live_preview_dir),
-        camera_map=camera_map,
-        settings=settings,
-        live_frame_provider=None,
-    )
-    print(f"Gallery running on http://{args.host}:{args.port}")
-    print(f"DB: {db_path}")
-    print(f"Snapshots: {Path(args.snapshot_dir)}")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
-
-
-if __name__ == "__main__":
-    main()
