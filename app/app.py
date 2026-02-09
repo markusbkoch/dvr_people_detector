@@ -212,6 +212,7 @@ class SurveillanceApp:
         self._last_live_preview_by_camera: Dict[int, float] = {}
         self._live_preview_frames: Dict[int, bytes] = {}
         self._live_preview_seq: Dict[int, int] = {}
+        self._last_low_conf_snapshot_by_camera: Dict[int, float] = {}
 
         self._ensure_managed_detector_models(configured_model=settings.yolo_model)
         self._init_feedback_store()
@@ -734,6 +735,54 @@ class SurveillanceApp:
                 return None
             return self._live_preview_seq.get(camera_id, 0), payload
 
+    def _annotate_low_conf_detection(
+        self,
+        frame,
+        confidence: float,
+        box: Optional[tuple[int, int, int, int]],
+    ) -> None:
+        """Draw low-confidence person candidate in amber for live preview."""
+        if box is None:
+            return
+        x1, y1, x2, y2 = box
+        color = (0, 190, 255)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(
+            frame,
+            f"person? {confidence:.2f}",
+            (x1, max(20, y1 - 10)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            color,
+            2,
+            cv2.LINE_AA,
+        )
+
+    def _save_low_conf_snapshot(
+        self,
+        frame,
+        camera: CameraConfig,
+        confidence: float,
+        box: Optional[tuple[int, int, int, int]],
+    ) -> None:
+        """Persist low-confidence detections for later review/retraining."""
+        now = monotonic()
+        last = self._last_low_conf_snapshot_by_camera.get(camera.channel_key)
+        if last is not None and now - last < max(0.0, self.settings.low_conf_review_cooldown_seconds):
+            return
+        self._last_low_conf_snapshot_by_camera[camera.channel_key] = now
+
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        conf_token = f"{int(round(confidence * 1000)):04d}"
+        box_token = "none" if box is None else f"{box[0]}_{box[1]}_{box[2]}_{box[3]}"
+        filename = f"lowconf_{camera.channel_key}_{stamp}_c{conf_token}_b{box_token}.jpg"
+        output_path = self.settings.snapshot_dir / filename
+        try:
+            cv2.imwrite(str(output_path), frame)
+        except Exception:
+            logger.exception("Failed saving low-confidence snapshot to %s", output_path)
+            self.stats.inc_errors()
+
     def _camera_on_cooldown(self, channel_id: int) -> bool:
         """Return whether detection alerts are in cooldown for this camera."""
         last_alert = self.last_alert_by_camera.get(channel_id)
@@ -934,17 +983,20 @@ class SurveillanceApp:
         if not has_person:
             self.pending_detection_by_camera.pop(camera_id, None)
             if confidence >= self.settings.low_conf_log_min_confidence:
+                self._annotate_low_conf_detection(frame_packet.frame, confidence, max_box)
+                self._save_low_conf_snapshot(frame_packet.frame, frame_packet.camera, confidence, max_box)
                 box_text = "none"
                 if max_box is not None:
                     box_text = f"{max_box[0]},{max_box[1]},{max_box[2]},{max_box[3]}"
                 logger.info(
-                    "Low-confidence person detection suppressed | camera=%s | channel=%s | confidence=%.3f | threshold=%.3f | bbox_xyxy=%s | captured_at=%s",
+                    "Low-confidence person detection suppressed | camera=%s | channel=%s | confidence=%.3f | threshold=%.3f | bbox_xyxy=%s | captured_at=%s | saved_to=%s",
                     frame_packet.camera.name,
                     frame_packet.camera.channel_key,
                     confidence,
                     self.settings.confidence_threshold,
                     box_text,
                     datetime.fromtimestamp(frame_packet.captured_at).isoformat(timespec="seconds"),
+                    str(self.settings.snapshot_dir),
                 )
             return
 

@@ -37,8 +37,9 @@ ISAPI_AUTH_MODE=auto
 ISAPI_TIMEOUT_SECONDS=4
 
 PERIODIC_ALERT_SECONDS=-1
-PERSON_CONFIDENCE_THRESHOLD=0.65
-LOW_CONF_LOG_MIN_CONFIDENCE=0.05
+MIN_PERSON_CONFIDENCE_FOR_ALERT=0.65
+MIN_PERSON_CONFIDENCE_FOR_LOW_CONF_REVIEW=0.05
+LOW_CONF_REVIEW_COOLDOWN_SECONDS=15
 PERSON_MIN_BOX_AREA_PX=0
 PERSON_MIN_MOVEMENT_PX=0
 DETECTION_CONFIRMATION_FRAMES=3
@@ -175,7 +176,7 @@ Model update behavior (`/reload_model`):
 - alerts sent and errors
 - running totals
 
-High-confidence means confidence `> 0.8 * PERSON_CONFIDENCE_THRESHOLD`.
+High-confidence means confidence `> 0.8 * MIN_PERSON_CONFIDENCE_FOR_ALERT`.
 
 Periodic status reports are enabled by default every 12 hours and can be configured with `STATUS_REPORT_INTERVAL_HOURS`.
 
@@ -224,12 +225,15 @@ Periodic status reports are enabled by default every 12 hours and can be configu
 - `YOLO_MODEL` (default: `detection_models/yolov8n.pt`)
   - YOLO model file used by `ultralytics`.
   - You can switch to larger models (`yolov8s.pt`, etc.) for accuracy at higher CPU/GPU cost.
-- `PERSON_CONFIDENCE_THRESHOLD` (default: `0.65`)
+- `MIN_PERSON_CONFIDENCE_FOR_ALERT` (default: `0.65`)
   - Minimum confidence to treat class `person` as detected.
   - Lower value increases sensitivity and false positives.
-- `LOW_CONF_LOG_MIN_CONFIDENCE` (default: `0.05`)
+- `MIN_PERSON_CONFIDENCE_FOR_LOW_CONF_REVIEW` (default: `0.05`)
   - Minimum confidence required to emit "Low-confidence person detection suppressed" log lines.
   - Helps reduce log noise from ultra-low-confidence tracker candidates.
+- `LOW_CONF_REVIEW_COOLDOWN_SECONDS` (default: `15`)
+  - Minimum time between low-confidence snapshot writes per camera to avoid disk flooding.
+  - Low-confidence snapshots are saved in `SNAPSHOT_DIR` with `lowconf_` filename prefix.
 - `PERSON_MIN_BOX_AREA_PX` (default: `0`)
   - Minimum person bounding-box area in pixels to consider detection valid.
   - Set `0` to disable area filtering.
@@ -311,4 +315,4 @@ Periodic status reports are enabled by default every 12 hours and can be configu
 - This prevents one camera's burst/processing from blocking other cameras.
 - During burst mode, the app runs face detection on each frame and picks the best face-quality frame for alerting.
 - Current face embeddings are baseline grayscale embeddings for bootstrapping. Upgrade to InsightFace/ArcFace next for stronger recognition.
-- Low-confidence person detections (below `PERSON_CONFIDENCE_THRESHOLD`) are logged with timestamp, camera, channel, and confidence, even when alerts are suppressed.
+- Low-confidence person detections (below `MIN_PERSON_CONFIDENCE_FOR_ALERT`) are logged and also saved to `SNAPSHOT_DIR` (rate-limited by `LOW_CONF_REVIEW_COOLDOWN_SECONDS`).
