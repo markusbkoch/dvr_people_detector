@@ -38,4 +38,5 @@ data/detector_training/
 
 # Model artifacts (keep directory scaffold if desired)
 detection_models/*.pt
+!detection_models/yolov8n_base.pt
 !detection_models/.gitkeep
