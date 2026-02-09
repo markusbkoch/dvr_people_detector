@@ -32,21 +32,21 @@ DVR_PASSWORD=***
 DVR_IP=***
 CAMERA_CHANNELS=101:Camera1;201:Camera2
 
-CAPTURE_MODE=isapi
+CAPTURE_MODE=rtsp
 ISAPI_AUTH_MODE=auto
 ISAPI_TIMEOUT_SECONDS=4
 
 PERIODIC_ALERT_SECONDS=-1
-MIN_PERSON_CONFIDENCE_FOR_ALERT=0.65
-MIN_PERSON_CONFIDENCE_FOR_LOW_CONF_REVIEW=0.05
+MIN_PERSON_CONFIDENCE_FOR_ALERT=0.5
+MIN_PERSON_CONFIDENCE_FOR_LOW_CONF_REVIEW=0.15
 LOW_CONF_REVIEW_COOLDOWN_SECONDS=15
-PERSON_MIN_BOX_AREA_PX=0
-PERSON_MIN_MOVEMENT_PX=0
+PERSON_MIN_BOX_AREA_PX=1200
+PERSON_MIN_MOVEMENT_PX=5
 DETECTION_CONFIRMATION_FRAMES=3
 DETECTION_CONFIRMATION_WINDOW_SECONDS=1.5
 IGNORED_PERSON_BBOXES=501:304,180,316,205
 DETECT_EVERY_SECONDS=1.2
-RTSP_DETECTION_FPS=6.0
+RTSP_DETECTION_FPS=12.0
 ALERT_COOLDOWN_SECONDS=40
 BURST_CAPTURE_SECONDS=4.0
 BURST_MAX_FRAMES=12
@@ -201,7 +201,7 @@ Periodic status reports are enabled by default every 12 hours and can be configu
 
 ### Capture mode and camera access
 
-- `CAPTURE_MODE` (default: `isapi`)
+- `CAPTURE_MODE` (default: `rtsp`)
   - `isapi`: poll JPEG snapshots via ISAPI.
   - `rtsp`: read stream frames continuously.
 - `CAMERA_RECONNECT_SECONDS` (default: `5`)
@@ -225,19 +225,19 @@ Periodic status reports are enabled by default every 12 hours and can be configu
 - `YOLO_MODEL` (default: `detection_models/yolov8n.pt`)
   - YOLO model file used by `ultralytics`.
   - You can switch to larger models (`yolov8s.pt`, etc.) for accuracy at higher CPU/GPU cost.
-- `MIN_PERSON_CONFIDENCE_FOR_ALERT` (default: `0.65`)
+- `MIN_PERSON_CONFIDENCE_FOR_ALERT` (default: `0.5`)
   - Minimum confidence to treat class `person` as detected.
   - Lower value increases sensitivity and false positives.
-- `MIN_PERSON_CONFIDENCE_FOR_LOW_CONF_REVIEW` (default: `0.05`)
+- `MIN_PERSON_CONFIDENCE_FOR_LOW_CONF_REVIEW` (default: `0.15`)
   - Minimum confidence required to emit "Low-confidence person detection suppressed" log lines.
   - Helps reduce log noise from ultra-low-confidence tracker candidates.
 - `LOW_CONF_REVIEW_COOLDOWN_SECONDS` (default: `15`)
   - Minimum time between low-confidence snapshot writes per camera to avoid disk flooding.
   - Low-confidence snapshots are saved in `SNAPSHOT_DIR` with `lowconf_` filename prefix.
-- `PERSON_MIN_BOX_AREA_PX` (default: `0`)
+- `PERSON_MIN_BOX_AREA_PX` (default: `1200`)
   - Minimum person bounding-box area in pixels to consider detection valid.
   - Set `0` to disable area filtering.
-- `PERSON_MIN_MOVEMENT_PX` (default: `0`)
+- `PERSON_MIN_MOVEMENT_PX` (default: `5`)
   - Minimum track-box center movement (pixels) required across confirmation window.
   - Useful to suppress static-object false positives. Set `0` to disable.
 - `DETECTION_CONFIRMATION_FRAMES` (default: `3`)
@@ -251,7 +251,7 @@ Periodic status reports are enabled by default every 12 hours and can be configu
 - `DETECT_EVERY_SECONDS` (default: `1.2`)
   - Per-camera polling interval used by ISAPI mode poller threads.
   - Lower values increase CPU/network load.
-- `RTSP_DETECTION_FPS` (default: `6.0`)
+- `RTSP_DETECTION_FPS` (default: `12.0`)
   - Target detection rate per camera in RTSP mode.
   - RTSP ingest is continuous; frames are sampled for inference at this FPS.
   - Increase for responsiveness, decrease to reduce CPU/GPU load.
