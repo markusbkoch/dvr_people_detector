@@ -2,12 +2,27 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from app.app import SurveillanceApp
 from app.config import build_camera_map, load_settings
 from app.web_ui import start_gallery_server
+
+
+class _SensitiveDataFilter(logging.Filter):
+    """Redact sensitive Telegram bot token fragments from log messages."""
+
+    _TELEGRAM_BOT_PATH_RE = re.compile(r"(https://api\.telegram\.org/bot)[^/\s]+")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        redacted = self._TELEGRAM_BOT_PATH_RE.sub(r"\1<redacted>", message)
+        if redacted != message:
+            record.msg = redacted
+            record.args = ()
+        return True
 
 
 def setup_logging() -> None:
@@ -25,6 +40,7 @@ def setup_logging() -> None:
     stream_handler = logging.StreamHandler()
     stream_handler.setLevel(logging.INFO)
     stream_handler.setFormatter(formatter)
+    stream_handler.addFilter(_SensitiveDataFilter())
 
     file_handler = RotatingFileHandler(
         filename=str(log_file),
@@ -34,9 +50,14 @@ def setup_logging() -> None:
     )
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(formatter)
+    file_handler.addFilter(_SensitiveDataFilter())
 
     root.addHandler(stream_handler)
     root.addHandler(file_handler)
+
+    # Avoid third-party HTTP request logging that can leak full Telegram URLs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def main() -> None:
