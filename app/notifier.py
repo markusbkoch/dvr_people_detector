@@ -196,6 +196,9 @@ class TelegramNotifier:
         def _loop() -> None:
             # Restrict command handling to the configured chat for safety.
             allowed_chat = str(self.chat_id).strip()
+            consecutive_failures = 0
+            degraded_since = 0.0
+            retry_delay_seconds = 2.0
             while not self._listener_stop.is_set():
                 try:
                     future = asyncio.run_coroutine_threadsafe(
@@ -203,9 +206,32 @@ class TelegramNotifier:
                         self._loop,
                     )
                     updates = future.result(timeout=40)
-                except Exception:
-                    logger.exception("Telegram command poll failed")
-                    time.sleep(2.0)
+                    if consecutive_failures > 0:
+                        outage_seconds = max(0.0, time.time() - degraded_since)
+                        logger.info(
+                            "Telegram command polling restored after %d failures (%.1fs outage)",
+                            consecutive_failures,
+                            outage_seconds,
+                        )
+                    consecutive_failures = 0
+                    degraded_since = 0.0
+                    retry_delay_seconds = 2.0
+                except Exception as exc:
+                    consecutive_failures += 1
+                    if consecutive_failures == 1:
+                        degraded_since = time.time()
+                        logger.warning("Telegram command polling degraded: %s", exc)
+                    elif consecutive_failures in {3, 10} or consecutive_failures % 30 == 0:
+                        outage_seconds = max(0.0, time.time() - degraded_since)
+                        logger.warning(
+                            "Telegram command polling still failing (%d failures, %.1fs outage, retry in %.1fs): %s",
+                            consecutive_failures,
+                            outage_seconds,
+                            retry_delay_seconds,
+                            exc,
+                        )
+                    time.sleep(retry_delay_seconds)
+                    retry_delay_seconds = min(60.0, retry_delay_seconds * 1.5)
                     continue
 
                 for update in updates:
