@@ -865,8 +865,23 @@ python main.py</pre>
               }});
 
               document.addEventListener('keydown', (ev) => {{
-                if (ev.key === 'ArrowRight') activate(Math.min(thumbs.length - 1, idx + 1));
-                if (ev.key === 'ArrowLeft') activate(Math.max(0, idx - 1));
+                const target = ev.target;
+                if (target instanceof HTMLElement) {{
+                  const tag = target.tagName;
+                  const isTypingContext =
+                    target.isContentEditable ||
+                    tag === 'INPUT' ||
+                    tag === 'TEXTAREA' ||
+                    tag === 'SELECT';
+                  if (isTypingContext) return;
+                }}
+                if (ev.key === 'ArrowRight') {{
+                  ev.preventDefault();
+                  activate(Math.min(thumbs.length - 1, idx + 1));
+                }} else if (ev.key === 'ArrowLeft') {{
+                  ev.preventDefault();
+                  activate(Math.max(0, idx - 1));
+                }}
               }});
               activate(0);
               refreshSelectionUi();
