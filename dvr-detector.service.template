@@ -1,0 +1,24 @@
+[Unit]
+Description=DVR People Detector
+After=network.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__PROJECT_DIR__
+ExecStart=__PROJECT_DIR__/.venv/bin/python main.py
+Restart=always
+RestartSec=5
+Environment=GALLERY_HOST=0.0.0.0
+Environment=GALLERY_PORT=8765
+
+# Logging
+StandardOutput=append:__PROJECT_DIR__/logs/surveillance.log
+StandardError=append:__PROJECT_DIR__/logs/surveillance.log
+
+# Resource limits
+MemoryMax=4G
+CPUQuota=200%
+
+[Install]
+WantedBy=multi-user.target
