@@ -529,6 +529,23 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
                 conn.execute("SELECT COUNT(*) FROM snapshot_reviews WHERE detector_label IS NOT NULL").fetchone()[0]
             )
         snapshot_count = len(self._all_snapshots())
+        
+        # Get camera status
+        cameras_ok = 0
+        cameras_total = len(self.camera_map)
+        camera_status_html = []
+        for cam_id in sorted(self.camera_map):
+            camera = self.camera_map[cam_id]
+            is_ok = False
+            if self.live_frame_provider:
+                frame = self.live_frame_provider(cam_id)
+                is_ok = frame is not None
+                if is_ok:
+                    cameras_ok += 1
+            status_class = "status-ok" if is_ok else "status-error"
+            camera_status_html.append(
+                f'<div class="camera-status {status_class}"><span class="status-dot"></span>{html.escape(camera.name)}</div>'
+            )
 
         return f"""
         <html>
@@ -560,6 +577,43 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
             }}
             .stat-value {{ font-size: 1.5rem; font-weight: 700; color: var(--accent); }}
             .stat-label {{ font-size: 0.8rem; color: var(--ink-muted); margin-top: 2px; }}
+            .camera-status-section {{
+              margin-top: 16px;
+              padding-top: 12px;
+              border-top: 1px solid var(--stroke);
+            }}
+            .camera-status-section h3 {{
+              font-size: 0.8rem;
+              font-weight: 600;
+              color: var(--ink-secondary);
+              margin-bottom: 8px;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+            }}
+            .camera-status-list {{
+              display: flex;
+              flex-wrap: wrap;
+              gap: 8px;
+            }}
+            .camera-status {{
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              padding: 4px 10px;
+              background: var(--bg-tertiary);
+              border-radius: 6px;
+              font-size: 0.8rem;
+              color: var(--ink-secondary);
+            }}
+            .status-dot {{
+              width: 8px;
+              height: 8px;
+              border-radius: 50%;
+              background: var(--ink-muted);
+            }}
+            .status-ok .status-dot {{ background: var(--success); }}
+            .status-error .status-dot {{ background: var(--error); }}
+            .status-warning .status-dot {{ background: var(--warning); }}
             .quick-links {{
               display: grid;
               grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -631,8 +685,14 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
                     <div class="stat-label">People</div>
                   </div>
                   <div class="stat-card">
-                    <div class="stat-value">{len(self.camera_map)}</div>
-                    <div class="stat-label">Cameras</div>
+                    <div class="stat-value">{cameras_ok}/{cameras_total}</div>
+                    <div class="stat-label">Cameras Online</div>
+                  </div>
+                </div>
+                <div class="camera-status-section">
+                  <h3>Camera Status</h3>
+                  <div class="camera-status-list">
+                    {''.join(camera_status_html) if camera_status_html else '<span style="color:var(--ink-muted);font-size:0.85rem;">No cameras configured</span>'}
                   </div>
                 </div>
               </div>
@@ -836,9 +896,16 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
             camera = self.camera_map[channel_id]
             thumb_src = f"/live/frame?channel={channel_id}"
             camera_items.append((channel_id, camera.name))
+            # Check if camera is online
+            is_ok = False
+            if self.live_frame_provider:
+                frame = self.live_frame_provider(channel_id)
+                is_ok = frame is not None
+            status_class = "status-ok" if is_ok else "status-error"
             tiles.append(
                 f"""
-                <button class="thumb" type="button" data-channel="{channel_id}" data-name="{html.escape(camera.name)}">
+                <button class="thumb {status_class}" type="button" data-channel="{channel_id}" data-name="{html.escape(camera.name)}">
+                  <div class="thumb-status"><span class="status-dot"></span></div>
                   <img src="{thumb_src}" alt="live {html.escape(camera.name)}" loading="lazy" />
                   <span class="thumb-label">{html.escape(camera.name)} ({channel_id})</span>
                 </button>
@@ -933,6 +1000,23 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
               font-weight: 600;
               color: var(--ink-primary);
             }}
+            .thumb-status {{
+              position: absolute;
+              top: 8px;
+              right: 8px;
+              padding: 4px 8px;
+              background: rgba(0, 0, 0, 0.6);
+              border-radius: 4px;
+            }}
+            .thumb {{ position: relative; }}
+            .status-dot {{
+              width: 8px;
+              height: 8px;
+              border-radius: 50%;
+              display: inline-block;
+            }}
+            .status-ok .status-dot {{ background: var(--success); }}
+            .status-error .status-dot {{ background: var(--error); }}
           </style>
         </head>
         <body>
