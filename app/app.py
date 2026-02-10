@@ -213,6 +213,7 @@ class SurveillanceApp:
         self._live_preview_frames: Dict[int, bytes] = {}
         self._live_preview_seq: Dict[int, int] = {}
         self._last_low_conf_snapshot_by_camera: Dict[int, float] = {}
+        self._last_low_conf_box_by_camera: Dict[int, tuple[int, int, int, int]] = {}
 
         self._ensure_managed_detector_models(configured_model=settings.yolo_model)
         self._init_feedback_store()
@@ -820,6 +821,17 @@ class SurveillanceApp:
         last = self._last_low_conf_snapshot_by_camera.get(camera.channel_key)
         if last is not None and now - last < max(0.0, self.settings.low_conf_review_cooldown_seconds):
             return
+        
+        # Skip if bbox is very similar to last logged detection (static object)
+        if box is not None:
+            last_box = self._last_low_conf_box_by_camera.get(camera.channel_key)
+            if last_box is not None:
+                distance = self._box_center_distance_px(box, last_box)
+                # If center moved less than 30px, likely same static object
+                if distance < 30.0:
+                    return
+            self._last_low_conf_box_by_camera[camera.channel_key] = box
+        
         self._last_low_conf_snapshot_by_camera[camera.channel_key] = now
 
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
