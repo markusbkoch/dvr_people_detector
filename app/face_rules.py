@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Face embedding, identity matching, and notification-policy helpers."""
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,8 @@ import numpy as np
 
 from app.face_db import FaceDatabase
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class RecognitionResult:
@@ -21,8 +24,100 @@ class RecognitionResult:
     confidence: float
 
 
-class FaceEmbeddingEngine:
-    """Baseline OpenCV-based face extraction and lightweight embedding engine."""
+class InsightFaceEngine:
+    """InsightFace/ArcFace-based face detection and embedding engine.
+    
+    Uses RetinaFace for detection and ArcFace for 512-dimensional embeddings.
+    Much more accurate than baseline, especially for varying angles/lighting.
+    """
+
+    def __init__(self, model_name: str = "buffalo_l", ctx_id: int = -1) -> None:
+        """Initialize InsightFace model.
+        
+        Args:
+            model_name: Model pack name (buffalo_l, buffalo_s, etc.)
+            ctx_id: -1 for CPU, 0+ for GPU
+        """
+        self._app = None
+        self._model_name = model_name
+        self._ctx_id = ctx_id
+        self._init_attempted = False
+        self._init_error: Optional[str] = None
+
+    def _lazy_init(self) -> bool:
+        """Lazy-load InsightFace models on first use."""
+        if self._app is not None:
+            return True
+        if self._init_attempted:
+            return False
+            
+        self._init_attempted = True
+        try:
+            from insightface.app import FaceAnalysis
+            
+            self._app = FaceAnalysis(
+                name=self._model_name,
+                providers=['CPUExecutionProvider'] if self._ctx_id < 0 else ['CUDAExecutionProvider'],
+            )
+            self._app.prepare(ctx_id=self._ctx_id, det_size=(640, 640))
+            logger.info("InsightFace engine initialized with model=%s", self._model_name)
+            return True
+        except Exception as e:
+            self._init_error = str(e)
+            logger.warning("InsightFace initialization failed: %s. Falling back to baseline.", e)
+            return False
+
+    def _quality(self, face) -> float:
+        """Compute quality score from InsightFace face object."""
+        # Use detection score and face size as quality indicators
+        det_score = float(face.det_score) if hasattr(face, 'det_score') else 0.5
+        bbox = face.bbox
+        area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
+        # Normalize area (assume 640x640 input, face area up to ~40% is good)
+        area_score = min(1.0, area / (640 * 640 * 0.2))
+        return det_score * 50.0 + area_score * 50.0
+
+    def best_face_embedding(self, frame_bgr: np.ndarray) -> tuple[Optional[np.ndarray], float]:
+        """Return the highest-quality face embedding from a frame, if any."""
+        if not self._lazy_init():
+            return None, 0.0
+
+        try:
+            faces = self._app.get(frame_bgr)
+            if not faces:
+                return None, 0.0
+
+            best_face = None
+            best_score = -1.0
+
+            for face in faces:
+                score = self._quality(face)
+                if score > best_score:
+                    best_score = score
+                    best_face = face
+
+            if best_face is None or not hasattr(best_face, 'embedding'):
+                return None, 0.0
+
+            embedding = best_face.embedding.astype(np.float32)
+            # Normalize embedding
+            norm = np.linalg.norm(embedding)
+            if norm > 0:
+                embedding = embedding / norm
+
+            return embedding, best_score
+
+        except Exception as e:
+            logger.warning("InsightFace inference failed: %s", e)
+            return None, 0.0
+
+
+class BaselineFaceEngine:
+    """Baseline OpenCV-based face extraction and lightweight embedding engine.
+    
+    Uses Haar Cascade for detection and 16x16 grayscale resize for embeddings.
+    Fast but low accuracy - use as fallback only.
+    """
 
     def __init__(self) -> None:
         """Load cascade detector once for reuse across frame evaluations."""
@@ -73,13 +168,52 @@ class FaceEmbeddingEngine:
         return best_embedding, best_score
 
 
+# Backwards compatibility alias
+FaceEmbeddingEngine = BaselineFaceEngine
+
+
+class HybridFaceEngine:
+    """Face engine that tries InsightFace first, falls back to baseline."""
+
+    def __init__(self, prefer_insightface: bool = True) -> None:
+        self._insightface: Optional[InsightFaceEngine] = None
+        self._baseline: Optional[BaselineFaceEngine] = None
+        self._prefer_insightface = prefer_insightface
+        
+        if prefer_insightface:
+            self._insightface = InsightFaceEngine()
+
+    def best_face_embedding(self, frame_bgr: np.ndarray) -> tuple[Optional[np.ndarray], float]:
+        """Return the highest-quality face embedding from a frame."""
+        # Try InsightFace first
+        if self._insightface is not None:
+            embedding, score = self._insightface.best_face_embedding(frame_bgr)
+            if embedding is not None:
+                return embedding, score
+            # If InsightFace failed to init, fall through to baseline
+            if self._insightface._init_attempted and self._insightface._app is None:
+                logger.info("InsightFace unavailable, using baseline engine")
+                self._insightface = None  # Stop trying
+
+        # Fallback to baseline
+        if self._baseline is None:
+            self._baseline = BaselineFaceEngine()
+        return self._baseline.best_face_embedding(frame_bgr)
+
+
 class FaceRecognizer:
     """High-level recognizer backed by local embedding database."""
 
-    def __init__(self, db_path: str = "data/faces.db", match_threshold: float = 0.80, min_samples: int = 3) -> None:
+    def __init__(
+        self,
+        db_path: str = "data/faces.db",
+        match_threshold: float = 0.80,
+        min_samples: int = 3,
+        use_insightface: bool = True,
+    ) -> None:
         """Initialize embedding engine and DB-backed matching parameters."""
         self.db = FaceDatabase(Path(db_path))
-        self.engine = FaceEmbeddingEngine()
+        self.engine = HybridFaceEngine(prefer_insightface=use_insightface)
         self.match_threshold = match_threshold
         self.min_samples = min_samples
 
