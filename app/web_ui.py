@@ -34,6 +34,7 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
     live_frame_provider: Optional[Callable[[int], Optional[tuple[int, bytes]]]] = None
     model_importer: Optional[Callable[[Path, bool], tuple[bool, str]]] = None
     model_status_provider: Optional[Callable[[], dict[str, object]]] = None
+    stats_provider: Optional[Callable[[], dict[str, object]]] = None
     camera_map: dict[int, CameraConfig] = {}
     settings: Settings | None = None
 
@@ -143,6 +144,33 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
             "model": model_status,
         }
         self._send_json(health)
+
+    def _send_metrics(self) -> None:
+        """Return Prometheus-format metrics."""
+        lines = []
+        lines.append("# HELP dvr_cameras_total Total number of configured cameras")
+        lines.append("# TYPE dvr_cameras_total gauge")
+        lines.append(f"dvr_cameras_total {len(self.camera_map)}")
+        
+        lines.append("# HELP dvr_snapshots_total Total snapshots on disk")
+        lines.append("# TYPE dvr_snapshots_total gauge")
+        lines.append(f"dvr_snapshots_total {len(self._all_snapshots())}")
+        
+        if self.stats_provider:
+            stats = self.stats_provider()
+            for key, value in stats.items():
+                if isinstance(value, (int, float)):
+                    metric_name = f"dvr_{key}"
+                    lines.append(f"# TYPE {metric_name} counter")
+                    lines.append(f"{metric_name} {value}")
+        
+        body = "\n".join(lines) + "\n"
+        data = body.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def _redirect(self, location: str) -> None:
         """Issue HTTP redirect response."""
@@ -1234,6 +1262,10 @@ python main.py</pre>
             self._send_health()
             return
 
+        if parsed.path == "/metrics":
+            self._send_metrics()
+            return
+
         if parsed.path == "/people":
             self._send_html(self._render_people())
             return
@@ -1561,6 +1593,7 @@ def create_gallery_server(
     live_frame_provider: Callable[[int], Optional[tuple[int, bytes]]],
     model_importer: Optional[Callable[[Path, bool], tuple[bool, str]]] = None,
     model_status_provider: Optional[Callable[[], dict[str, object]]] = None,
+    stats_provider: Optional[Callable[[], dict[str, object]]] = None,
 ) -> ThreadingHTTPServer:
     """Create configured gallery HTTP server instance."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1571,6 +1604,7 @@ def create_gallery_server(
     FaceGalleryHandler.live_frame_provider = live_frame_provider
     FaceGalleryHandler.model_importer = model_importer
     FaceGalleryHandler.model_status_provider = model_status_provider
+    FaceGalleryHandler.stats_provider = stats_provider
     return ThreadingHTTPServer((host, port), FaceGalleryHandler)
 
 
@@ -1585,6 +1619,7 @@ def start_gallery_server(
     live_frame_provider: Callable[[int], Optional[tuple[int, bytes]]],
     model_importer: Optional[Callable[[Path, bool], tuple[bool, str]]] = None,
     model_status_provider: Optional[Callable[[], dict[str, object]]] = None,
+    stats_provider: Optional[Callable[[], dict[str, object]]] = None,
 ) -> tuple[ThreadingHTTPServer, threading.Thread]:
     """Create and start gallery server in a background thread."""
     server = create_gallery_server(
@@ -1597,6 +1632,7 @@ def start_gallery_server(
         live_frame_provider=live_frame_provider,
         model_importer=model_importer,
         model_status_provider=model_status_provider,
+        stats_provider=stats_provider,
     )
     thread = threading.Thread(target=server.serve_forever, name="face-gallery", daemon=True)
     thread.start()

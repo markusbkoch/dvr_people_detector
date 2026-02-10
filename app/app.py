@@ -155,6 +155,19 @@ class RuntimeStats:
             f"high_conf={self.high_conf_people_detected}, alerts={self.alerts_sent}, errors={self.errors}"
         )
 
+    def to_dict(self) -> dict[str, object]:
+        """Return current stats as a dict for Prometheus/metrics export."""
+        with self._lock:
+            return {
+                "frames_downloaded": self.frames_downloaded,
+                "snapshots_saved": self.snapshots_saved,
+                "people_detected": self.people_detected,
+                "high_conf_people_detected": self.high_conf_people_detected,
+                "alerts_sent": self.alerts_sent,
+                "errors": self.errors,
+                "uptime_seconds": int(time.time() - self.started_at),
+            }
+
 
 class SurveillanceApp:
     """Top-level service object controlling worker lifecycle and pipelines."""
@@ -423,6 +436,10 @@ class SurveillanceApp:
             "update_running": self._model_update_running(),
             "loaded_model": self._current_model_name(),
         }
+
+    def get_stats(self) -> dict[str, object]:
+        """Return runtime stats as a dict for Prometheus/metrics export."""
+        return self.stats.to_dict()
 
     def import_model_file(self, source_path: Path, replace_base: bool = False) -> tuple[bool, str]:
         """Import model weights and reload workers by bumping model generation."""
