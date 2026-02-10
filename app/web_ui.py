@@ -277,36 +277,138 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <title>Face & Snapshot Review</title>
           <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; background: #f6f7f9; color: #111; }}
-            .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }}
-            .card {{ background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; text-decoration: none; color: inherit; }}
-            .title {{ font-weight: 700; margin-bottom: 6px; }}
-            .sub {{ color: #555; }}
+            :root {{
+              --bg-1: #f0f5ff;
+              --bg-2: #fff7ec;
+              --ink: #0f172a;
+              --muted: #475569;
+              --card: rgba(255, 255, 255, 0.84);
+              --stroke: rgba(148, 163, 184, 0.35);
+              --accent: #1d4ed8;
+            }}
+            * {{ box-sizing: border-box; }}
+            body {{
+              font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif;
+              margin: 0;
+              color: var(--ink);
+              background:
+                radial-gradient(1200px 520px at 0% -10%, #bfdbfe 0%, transparent 60%),
+                radial-gradient(900px 520px at 100% 0%, #fed7aa 0%, transparent 55%),
+                linear-gradient(160deg, var(--bg-1), var(--bg-2));
+              min-height: 100vh;
+              padding: 30px 24px 48px;
+            }}
+            .shell {{ max-width: 1140px; margin: 0 auto; }}
+            .hero {{
+              display: grid;
+              grid-template-columns: 1.3fr 1fr;
+              gap: 14px;
+              margin-bottom: 14px;
+            }}
+            .panel {{
+              backdrop-filter: blur(10px);
+              background: var(--card);
+              border: 1px solid var(--stroke);
+              border-radius: 16px;
+              padding: 16px;
+              box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+            }}
+            .eyebrow {{
+              display: inline-block;
+              font-size: 12px;
+              letter-spacing: 0.08em;
+              text-transform: uppercase;
+              color: var(--accent);
+              font-weight: 700;
+            }}
+            h1 {{ margin: 8px 0 6px; font-size: clamp(1.5rem, 2.8vw, 2.3rem); line-height: 1.12; }}
+            .lead {{ margin: 0; color: var(--muted); font-size: 0.98rem; }}
+            .stats {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }}
+            .stat {{
+              border-radius: 12px;
+              border: 1px solid rgba(191, 219, 254, 0.8);
+              background: rgba(219, 234, 254, 0.55);
+              padding: 10px;
+            }}
+            .stat-k {{ font-size: 1.1rem; font-weight: 700; }}
+            .stat-v {{ color: #1e3a8a; font-size: 0.8rem; }}
+            .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }}
+            .card {{
+              display: block;
+              text-decoration: none;
+              color: inherit;
+              background: var(--card);
+              border: 1px solid var(--stroke);
+              border-radius: 14px;
+              padding: 14px;
+              transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+            }}
+            .card:hover {{
+              transform: translateY(-2px);
+              border-color: rgba(59, 130, 246, 0.55);
+              box-shadow: 0 16px 26px rgba(30, 64, 175, 0.12);
+            }}
+            .title {{ font-size: 1.02rem; font-weight: 700; margin-bottom: 4px; }}
+            .sub {{ color: var(--muted); font-size: 0.9rem; line-height: 1.35; }}
+            .tag {{
+              display: inline-block;
+              margin-top: 8px;
+              padding: 3px 8px;
+              border-radius: 999px;
+              background: rgba(37, 99, 235, 0.12);
+              color: #1d4ed8;
+              font-size: 0.75rem;
+              font-weight: 700;
+            }}
+            @media (max-width: 900px) {{
+              .hero {{ grid-template-columns: 1fr; }}
+            }}
           </style>
         </head>
         <body>
-          <h1>Face & Snapshot Review</h1>
-          <div class="cards">
+          <div class="shell">
+            <section class="hero">
+              <div class="panel">
+                <span class="eyebrow">Surveillance Console</span>
+                <h1>Face & Snapshot Review</h1>
+                <p class="lead">Operational dashboard for live monitoring, detector feedback, identity curation, and model lifecycle management.</p>
+              </div>
+              <div class="panel">
+                <div class="stats">
+                  <div class="stat"><div class="stat-k">{snapshot_count}</div><div class="stat-v">Snapshots</div></div>
+                  <div class="stat"><div class="stat-k">{reviewed_snapshots}</div><div class="stat-v">Reviewed</div></div>
+                  <div class="stat"><div class="stat-k">{person_count}</div><div class="stat-v">People</div></div>
+                  <div class="stat"><div class="stat-k">{len(self.camera_map)}</div><div class="stat-v">Cameras</div></div>
+                </div>
+              </div>
+            </section>
+            <div class="cards">
             <a class="card" href="/snapshots">
               <div class="title">Snapshot Review</div>
               <div class="sub">{snapshot_count} snapshots · {reviewed_snapshots} reviewed</div>
+              <span class="tag">Feedback Loop 1</span>
             </a>
             <a class="card" href="/people">
               <div class="title">People Gallery</div>
               <div class="sub">{person_count} people · {face_sample_count} face samples</div>
+              <span class="tag">Identity Curation</span>
             </a>
             <a class="card" href="/live">
               <div class="title">Live Feed</div>
               <div class="sub">{len(self.camera_map)} camera feeds in browser</div>
+              <span class="tag">Operations</span>
             </a>
             <a class="card" href="/guide">
               <div class="title">User Guide</div>
               <div class="sub">System setup, parameters, review workflow and training export</div>
+              <span class="tag">Documentation</span>
             </a>
             <a class="card" href="/models">
               <div class="title">Model Management</div>
               <div class="sub">Import a YOLO .pt file and switch active/base model</div>
+              <span class="tag">Model Ops</span>
             </a>
+          </div>
           </div>
         </body>
         </html>
@@ -339,21 +441,35 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <title>Model Management</title>
           <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; background: #f6f7f9; color: #111; }}
-            a {{ color: #2563eb; text-decoration: none; }}
-            .card {{ background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-top: 12px; }}
-            .status-grid {{ display: grid; grid-template-columns: 180px 1fr; gap: 8px 10px; }}
+            :root {{
+              --bg: #f4f8ff;
+              --ink: #0f172a;
+              --muted: #475569;
+              --card: #ffffff;
+              --stroke: #dbe4f0;
+            }}
+            * {{ box-sizing: border-box; }}
+            body {{ font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif; margin: 0; background: radial-gradient(800px 400px at 0% 0%, #dbeafe 0%, transparent 60%), var(--bg); color: var(--ink); padding: 26px 22px 40px; }}
+            .shell {{ max-width: 1020px; margin: 0 auto; }}
+            a {{ color: #1d4ed8; text-decoration: none; }}
+            .top {{ margin-bottom: 10px; color: var(--muted); }}
+            .card {{ background: var(--card); border: 1px solid var(--stroke); border-radius: 16px; padding: 16px; margin-top: 12px; box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06); }}
+            h1 {{ margin: 4px 0 6px; }}
+            h2 {{ margin: 2px 0 10px; font-size: 1.12rem; }}
+            .status-grid {{ display: grid; grid-template-columns: 200px 1fr; gap: 9px 10px; }}
             code {{ background: #eef2f7; padding: 2px 6px; border-radius: 6px; word-break: break-all; }}
-            .msg {{ border-radius: 8px; padding: 10px 12px; margin: 10px 0 0 0; }}
+            .msg {{ border-radius: 10px; padding: 11px 12px; margin: 10px 0 0 0; }}
             .msg.ok {{ background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }}
             .msg.err {{ background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }}
-            form {{ display: grid; gap: 10px; max-width: 640px; }}
-            button {{ width: fit-content; padding: 9px 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; cursor: pointer; }}
-            .help {{ color: #555; font-size: 14px; }}
+            form {{ display: grid; gap: 10px; max-width: 680px; }}
+            input[type="file"] {{ padding: 8px; border: 1px solid var(--stroke); border-radius: 10px; background: #f8fbff; }}
+            button {{ width: fit-content; padding: 10px 14px; border: 1px solid #bfdbfe; border-radius: 10px; background: linear-gradient(180deg, #eff6ff, #dbeafe); color: #1e3a8a; font-weight: 700; cursor: pointer; }}
+            .help {{ color: var(--muted); font-size: 14px; margin: 0 0 4px; }}
           </style>
         </head>
         <body>
-          <p><a href="/">← Home</a> · <a href="/guide">Guide</a></p>
+          <div class="shell">
+          <p class="top"><a href="/">← Home</a> · <a href="/guide">Guide</a></p>
           <h1>Model Management</h1>
           <div class="card">
             <div class="status-grid">
@@ -373,6 +489,7 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
               <button type="submit">Import Model</button>
             </form>
             {message_html}
+          </div>
           </div>
         </body>
         </html>
@@ -404,26 +521,65 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <title>Live Feed</title>
           <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; background: #f6f7f9; color: #111; }}
-            a {{ color: #2563eb; text-decoration: none; }}
-            .viewer {{ background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; }}
-            .viewer img {{ width: 100%; max-height: 70vh; object-fit: contain; background: #111; border-radius: 10px; }}
+            :root {{
+              --ink: #0b1220;
+              --muted: #64748b;
+              --card: rgba(255, 255, 255, 0.92);
+              --stroke: rgba(148, 163, 184, 0.35);
+              --accent: #2563eb;
+            }}
+            * {{ box-sizing: border-box; }}
+            body {{
+              font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif;
+              margin: 0;
+              background:
+                radial-gradient(900px 500px at 0% -20%, #bfdbfe 0%, transparent 60%),
+                radial-gradient(900px 500px at 100% -20%, #fde68a 0%, transparent 55%),
+                #eff4fb;
+              color: var(--ink);
+              padding: 24px 20px 36px;
+            }}
+            .shell {{ max-width: 1240px; margin: 0 auto; }}
+            a {{ color: #1d4ed8; text-decoration: none; }}
+            .top {{ color: var(--muted); margin-bottom: 8px; }}
+            .hero {{
+              margin-bottom: 10px;
+              background: var(--card);
+              border: 1px solid var(--stroke);
+              border-radius: 16px;
+              padding: 12px 14px;
+              box-shadow: 0 18px 34px rgba(15, 23, 42, 0.07);
+            }}
+            .hero h1 {{ margin: 4px 0; font-size: clamp(1.2rem, 2.4vw, 1.9rem); }}
+            .hero p {{ margin: 0; color: var(--muted); }}
+            .viewer {{ background: var(--card); border: 1px solid var(--stroke); border-radius: 14px; padding: 12px; box-shadow: 0 18px 34px rgba(15, 23, 42, 0.08); }}
+            .viewer img {{ width: 100%; max-height: 70vh; object-fit: contain; background: #070b14; border-radius: 10px; }}
             .viewer-top {{ display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 8px; }}
-            .viewer-title {{ font-weight: 700; }}
-            .viewer-help {{ color: #555; font-size: 0.9rem; }}
+            .viewer-title {{ font-weight: 800; }}
+            .viewer-help {{ color: var(--muted); font-size: 0.9rem; }}
             .thumbs {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; }}
-            .thumb {{ border: 2px solid #d1d5db; background: white; border-radius: 10px; padding: 6px; cursor: pointer; text-align: left; }}
-            .thumb.active {{ border-color: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; }}
-            .thumb img {{ width: 100%; height: 108px; object-fit: cover; border-radius: 6px; background: #111; display: block; }}
-            .thumb-label {{ display: block; margin-top: 5px; font-size: 0.88rem; color: #333; }}
-            .title {{ font-weight: 700; margin-bottom: 8px; }}
-            .sub {{ font-weight: 400; color: #555; }}
+            .thumb {{
+              border: 1px solid var(--stroke);
+              background: rgba(255, 255, 255, 0.78);
+              border-radius: 12px;
+              padding: 6px;
+              cursor: pointer;
+              text-align: left;
+              transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+            }}
+            .thumb:hover {{ transform: translateY(-2px); box-shadow: 0 10px 16px rgba(15, 23, 42, 0.1); }}
+            .thumb.active {{ border-color: var(--accent); box-shadow: 0 0 0 2px #bfdbfe; }}
+            .thumb img {{ width: 100%; height: 108px; object-fit: cover; border-radius: 8px; background: #111; display: block; }}
+            .thumb-label {{ display: block; margin-top: 6px; font-size: 0.86rem; color: #243041; font-weight: 600; }}
           </style>
         </head>
         <body>
-          <p><a href="/">← Home</a> · <a href="/snapshots">Snapshot Review</a> · <a href="/people">People Gallery</a> · <a href="/models">Model Management</a></p>
-          <h1>Live Feed</h1>
-          <p>Feeds are served from the running surveillance process.</p>
+          <div class="shell">
+          <p class="top"><a href="/">← Home</a> · <a href="/snapshots">Snapshot Review</a> · <a href="/people">People Gallery</a> · <a href="/models">Model Management</a></p>
+          <section class="hero">
+            <h1>Live Feed</h1>
+            <p>Real-time per-camera monitoring with keyboard navigation (← / →).</p>
+          </section>
           {'' if camera_items else '<p>No cameras configured.</p>'}
           <section class="viewer" id="viewer" style="display:{'block' if camera_items else 'none'};">
             <div class="viewer-top">
@@ -433,6 +589,7 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
             <img id="viewer-image" src="" alt="live focused camera" loading="eager" />
           </section>
           <div class="thumbs">{''.join(tiles)}</div>
+          </div>
           <script>
             const cameras = [{camera_list_js}];
             let currentIndex = 0;
@@ -748,20 +905,42 @@ python main.py</pre>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <title>People Gallery</title>
           <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; background: #f6f7f9; color: #111; }}
-            .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }}
-            .card {{ text-decoration: none; color: inherit; background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; }}
-            .thumb {{ width: 100%; height: 180px; object-fit: cover; display: block; background: #eee; }}
-            .thumb.empty {{ display:flex; align-items:center; justify-content:center; color:#666; font-size:14px; }}
-            .meta {{ padding: 10px 12px; }}
-            .title {{ font-weight: 600; }}
-            .sub {{ margin-top: 2px; color: #666; font-size: 13px; }}
+            :root {{
+              --ink: #0f172a;
+              --muted: #64748b;
+              --stroke: rgba(148, 163, 184, 0.35);
+            }}
+            * {{ box-sizing: border-box; }}
+            body {{ font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif; margin: 0; background: radial-gradient(700px 360px at 0% 0%, #dbeafe 0%, transparent 65%), #f4f7fc; color: var(--ink); padding: 24px 20px 34px; }}
+            .shell {{ max-width: 1180px; margin: 0 auto; }}
+            a {{ color: #1d4ed8; text-decoration: none; }}
+            .top {{ color: var(--muted); margin-bottom: 8px; }}
+            h1 {{ margin: 0 0 10px; }}
+            .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }}
+            .card {{
+              text-decoration: none;
+              color: inherit;
+              background: rgba(255, 255, 255, 0.92);
+              border-radius: 14px;
+              overflow: hidden;
+              border: 1px solid var(--stroke);
+              box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+              transition: transform 140ms ease, box-shadow 140ms ease;
+            }}
+            .card:hover {{ transform: translateY(-2px); box-shadow: 0 18px 30px rgba(30, 64, 175, 0.12); }}
+            .thumb {{ width: 100%; height: 180px; object-fit: cover; display: block; background: #e2e8f0; }}
+            .thumb.empty {{ display:flex; align-items:center; justify-content:center; color:#475569; font-size:14px; }}
+            .meta {{ padding: 11px 12px 12px; }}
+            .title {{ font-weight: 700; }}
+            .sub {{ margin-top: 2px; color: var(--muted); font-size: 13px; }}
           </style>
         </head>
         <body>
-          <p><a href="/">← Home</a> · <a href="/guide">Guide</a></p>
+          <div class="shell">
+          <p class="top"><a href="/">← Home</a> · <a href="/guide">Guide</a> · <a href="/models">Model Management</a></p>
           <h1>People Gallery</h1>
           <div class="grid">{''.join(cards) if cards else '<p>No persons found.</p>'}</div>
+          </div>
         </body>
         </html>
         """
@@ -828,33 +1007,47 @@ python main.py</pre>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <title>Snapshot Review</title>
           <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; background: #f6f7f9; color: #111; }}
-            a {{ color: #2563eb; text-decoration: none; }}
-            .viewer {{ background: white; border-radius: 12px; border: 1px solid #e5e7eb; padding: 12px; }}
-            .viewer img {{ width: 100%; max-height: 72vh; object-fit: contain; display: block; background: #eee; border-radius: 8px; }}
-            .meta {{ margin-top: 8px; font-size: 13px; color: #555; word-break: break-all; }}
+            :root {{
+              --ink: #0f172a;
+              --muted: #64748b;
+              --stroke: rgba(148, 163, 184, 0.38);
+              --card: rgba(255, 255, 255, 0.94);
+              --accent: #2563eb;
+            }}
+            * {{ box-sizing: border-box; }}
+            body {{ font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif; margin: 0; background: radial-gradient(860px 440px at 0% -10%, #dbeafe 0%, transparent 60%), #f3f7fe; color: var(--ink); padding: 24px 20px 40px; }}
+            .shell {{ max-width: 1240px; margin: 0 auto; }}
+            a {{ color: #1d4ed8; text-decoration: none; }}
+            .top {{ color: var(--muted); margin-bottom: 8px; }}
+            h1 {{ margin: 0; }}
+            .summary {{ margin: 6px 0 0; color: var(--muted); }}
+            .viewer {{ position: sticky; top: 14px; background: var(--card); border-radius: 14px; border: 1px solid var(--stroke); padding: 12px; box-shadow: 0 16px 28px rgba(15, 23, 42, 0.08); }}
+            .viewer img {{ width: 100%; max-height: 72vh; object-fit: contain; display: block; background: #e2e8f0; border-radius: 8px; }}
+            .meta {{ margin-top: 8px; font-size: 13px; color: var(--muted); word-break: break-all; }}
             .actions {{ margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
-            .actions button {{ padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; cursor: pointer; }}
-            .actions input {{ padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; min-width: 220px; }}
-            .state {{ font-size: 13px; color: #555; }}
+            .actions button {{ padding: 8px 12px; border: 1px solid #bfdbfe; border-radius: 9px; background: linear-gradient(180deg, #eff6ff, #dbeafe); color: #1e3a8a; font-weight: 700; cursor: pointer; }}
+            .actions input {{ padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 9px; min-width: 220px; }}
+            .state {{ font-size: 13px; color: var(--muted); margin-top: 4px; }}
             .thumbs {{ margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }}
             .sections {{ margin-top: 14px; display: grid; gap: 18px; }}
-            .section {{ background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; }}
+            .section {{ background: var(--card); border: 1px solid var(--stroke); border-radius: 14px; padding: 12px; box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05); }}
             .section h2 {{ margin: 0; font-size: 16px; }}
-            .section .sub {{ margin-top: 3px; font-size: 13px; color: #666; }}
-            .thumb {{ border: 2px solid #d1d5db; border-radius: 8px; background: white; padding: 0; cursor: pointer; overflow: hidden; }}
-            .thumb img {{ width: 100%; height: 100px; object-fit: cover; display: block; background: #eee; }}
-            .thumb.active {{ border-color: #2563eb; }}
-            .thumb.selected {{ outline: 3px solid #2563eb; outline-offset: -3px; }}
+            .section .sub {{ margin-top: 3px; font-size: 13px; color: var(--muted); }}
+            .thumb {{ border: 2px solid #d1d5db; border-radius: 10px; background: white; padding: 0; cursor: pointer; overflow: hidden; transition: transform 120ms ease, box-shadow 120ms ease; }}
+            .thumb:hover {{ transform: translateY(-1px); box-shadow: 0 8px 14px rgba(15, 23, 42, 0.12); }}
+            .thumb img {{ width: 100%; height: 100px; object-fit: cover; display: block; background: #e2e8f0; }}
+            .thumb.active {{ border-color: var(--accent); }}
+            .thumb.selected {{ outline: 3px solid var(--accent); outline-offset: -3px; }}
             .bulk {{ margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
-            .bulk button {{ padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; cursor: pointer; }}
-            .bulk .count {{ font-size: 13px; color: #555; min-width: 120px; }}
+            .bulk button {{ padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 9px; background: #fff; cursor: pointer; }}
+            .bulk .count {{ font-size: 13px; color: var(--muted); min-width: 120px; font-weight: 700; }}
           </style>
         </head>
         <body>
-          <p><a href="/">← Home</a> · <a href="/people">People Gallery</a> · <a href="/guide">Guide</a></p>
+          <div class="shell">
+          <p class="top"><a href="/">← Home</a> · <a href="/people">People Gallery</a> · <a href="/live">Live Feed</a> · <a href="/guide">Guide</a></p>
           <h1>Snapshot Review</h1>
-          <p>{len(files)} snapshots</p>
+          <p class="summary">{len(files)} snapshots</p>
           {"<p>No snapshots found.</p>" if not files else f'''
           <section class="viewer">
             <a id="viewer-link" href="{first_src}" target="_blank" rel="noopener noreferrer">
@@ -1047,6 +1240,7 @@ python main.py</pre>
             }})();
           </script>
           '''}
+          </div>
         </body>
         </html>
         """
@@ -1111,20 +1305,30 @@ python main.py</pre>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <title>{display_name}</title>
           <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; background: #f6f7f9; color: #111; }}
-            a {{ color: #2563eb; text-decoration: none; }}
+            :root {{
+              --ink: #0f172a;
+              --muted: #64748b;
+              --stroke: rgba(148, 163, 184, 0.35);
+            }}
+            * {{ box-sizing: border-box; }}
+            body {{ font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif; margin: 0; background: radial-gradient(740px 360px at 0% 0%, #dbeafe 0%, transparent 62%), #f4f8ff; color: var(--ink); padding: 24px 20px 36px; }}
+            .shell {{ max-width: 1200px; margin: 0 auto; }}
+            a {{ color: #1d4ed8; text-decoration: none; }}
+            .top {{ color: var(--muted); margin-bottom: 8px; }}
+            h1 {{ margin: 0; }}
             .rename {{ display: flex; gap: 8px; margin: 8px 0 16px 0; }}
             .rename input {{ flex: 1; max-width: 380px; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; }}
-            .rename button {{ padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; cursor: pointer; }}
+            .rename button {{ padding: 8px 12px; border: 1px solid #bfdbfe; border-radius: 8px; background: linear-gradient(180deg, #eff6ff, #dbeafe); color: #1e3a8a; font-weight: 700; cursor: pointer; }}
             .person-actions {{ margin: 0 0 16px 0; }}
             .person-actions button {{ padding: 8px 12px; border: 1px solid #ef4444; border-radius: 8px; color: #b91c1c; background: #fff; cursor: pointer; }}
-            .viewer {{ background: white; border-radius: 12px; border: 1px solid #e5e7eb; padding: 12px; }}
-            .viewer img {{ width: 100%; max-height: 72vh; object-fit: contain; display: block; background: #eee; border-radius: 8px; }}
-            .meta {{ margin-top: 8px; font-size: 13px; color: #555; }}
+            .viewer {{ background: rgba(255, 255, 255, 0.92); border-radius: 14px; border: 1px solid var(--stroke); padding: 12px; box-shadow: 0 16px 30px rgba(15, 23, 42, 0.07); }}
+            .viewer img {{ width: 100%; max-height: 72vh; object-fit: contain; display: block; background: #e2e8f0; border-radius: 8px; }}
+            .meta {{ margin-top: 8px; font-size: 13px; color: var(--muted); }}
             .path {{ word-break: break-all; margin-top: 4px; }}
             .thumbs {{ margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }}
-            .thumb {{ border: 2px solid transparent; border-radius: 8px; background: white; padding: 0; cursor: pointer; overflow: hidden; }}
-            .thumb img {{ width: 100%; height: 100px; object-fit: cover; display: block; background: #eee; }}
+            .thumb {{ border: 2px solid transparent; border-radius: 10px; background: white; padding: 0; cursor: pointer; overflow: hidden; transition: transform 120ms ease, box-shadow 120ms ease; }}
+            .thumb:hover {{ transform: translateY(-1px); box-shadow: 0 8px 14px rgba(15, 23, 42, 0.1); }}
+            .thumb img {{ width: 100%; height: 100px; object-fit: cover; display: block; background: #e2e8f0; }}
             .thumb.active {{ border-color: #2563eb; }}
             .moderation {{ margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
             .moderation input {{ padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; min-width: 220px; }}
@@ -1134,7 +1338,8 @@ python main.py</pre>
           </style>
         </head>
         <body>
-          <p><a href="/">← Home</a> · <a href="/people">People Gallery</a></p>
+          <div class="shell">
+          <p class="top"><a href="/">← Home</a> · <a href="/people">People Gallery</a> · <a href="/snapshots">Snapshot Review</a></p>
           <h1>{display_name}</h1>
           <p><code>{person_id_esc}</code> · {len(samples)} samples</p>
           <form class="rename" method="post" action="/person/{quote(person_id)}/rename">
@@ -1204,6 +1409,7 @@ python main.py</pre>
             }})();
           </script>
           '''}
+          </div>
         </body>
         </html>
         """
