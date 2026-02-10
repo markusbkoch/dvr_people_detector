@@ -3,12 +3,15 @@ from __future__ import annotations
 """Local web UI for reviewing snapshots and managing face/person datasets."""
 
 import html
+import cgi
 import re
+import shutil
 import sqlite3
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Callable, Optional
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
@@ -29,6 +32,8 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
     db_path: Path = Path("data/faces.db")
     snapshot_dir: Path = Path("data/snapshots")
     live_frame_provider: Optional[Callable[[int], Optional[tuple[int, bytes]]]] = None
+    model_importer: Optional[Callable[[Path, bool], tuple[bool, str]]] = None
+    model_status_provider: Optional[Callable[[], dict[str, object]]] = None
     camera_map: dict[int, CameraConfig] = {}
     settings: Settings | None = None
 
@@ -224,6 +229,76 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
               <div class="title">User Guide</div>
               <div class="sub">System setup, parameters, review workflow and training export</div>
             </a>
+            <a class="card" href="/models">
+              <div class="title">Model Management</div>
+              <div class="sub">Import a YOLO .pt file and switch active/base model</div>
+            </a>
+          </div>
+        </body>
+        </html>
+        """
+
+    def _render_models(self, message: str = "", ok: bool = True) -> str:
+        """Render model import/management page."""
+        status_provider = self.model_status_provider
+        status: dict[str, object] = {}
+        if status_provider is not None:
+            try:
+                status = status_provider() or {}
+            except Exception:
+                status = {}
+
+        active_model = html.escape(str(status.get("active_model", "n/a")))
+        base_model = html.escape(str(status.get("base_model", "n/a")))
+        loaded_model = html.escape(str(status.get("loaded_model", "n/a")))
+        generation = html.escape(str(status.get("generation", "n/a")))
+        update_running = "yes" if bool(status.get("update_running", False)) else "no"
+        update_running = html.escape(update_running)
+        message_html = (
+            f'<p class="msg {"ok" if ok else "err"}">{html.escape(message)}</p>' if message else ""
+        )
+
+        return f"""
+        <html>
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>Model Management</title>
+          <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; background: #f6f7f9; color: #111; }}
+            a {{ color: #2563eb; text-decoration: none; }}
+            .card {{ background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-top: 12px; }}
+            .status-grid {{ display: grid; grid-template-columns: 180px 1fr; gap: 8px 10px; }}
+            code {{ background: #eef2f7; padding: 2px 6px; border-radius: 6px; word-break: break-all; }}
+            .msg {{ border-radius: 8px; padding: 10px 12px; margin: 10px 0 0 0; }}
+            .msg.ok {{ background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }}
+            .msg.err {{ background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }}
+            form {{ display: grid; gap: 10px; max-width: 640px; }}
+            button {{ width: fit-content; padding: 9px 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; cursor: pointer; }}
+            .help {{ color: #555; font-size: 14px; }}
+          </style>
+        </head>
+        <body>
+          <p><a href="/">← Home</a> · <a href="/guide">Guide</a></p>
+          <h1>Model Management</h1>
+          <div class="card">
+            <div class="status-grid">
+              <div><strong>Active model</strong></div><div><code>{active_model}</code></div>
+              <div><strong>Loaded by workers</strong></div><div><code>{loaded_model}</code></div>
+              <div><strong>Base model</strong></div><div><code>{base_model}</code></div>
+              <div><strong>Generation</strong></div><div><code>{generation}</code></div>
+              <div><strong>Update running</strong></div><div><code>{update_running}</code></div>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Import New Model</h2>
+            <p class="help">Upload a <code>.pt</code> file to replace the active model immediately. Optionally also replace the base model used by <code>/reload_model</code>.</p>
+            <form method="post" action="/models/import" enctype="multipart/form-data">
+              <input type="file" name="model_file" accept=".pt" required />
+              <label><input type="checkbox" name="replace_base" value="1" /> Also replace base model (<code>detection_models/yolov8n_base.pt</code>)</label>
+              <button type="submit">Import Model</button>
+            </form>
+            {message_html}
           </div>
         </body>
         </html>
@@ -272,7 +347,7 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
           </style>
         </head>
         <body>
-          <p><a href="/">← Home</a> · <a href="/snapshots">Snapshot Review</a> · <a href="/people">People Gallery</a></p>
+          <p><a href="/">← Home</a> · <a href="/snapshots">Snapshot Review</a> · <a href="/people">People Gallery</a> · <a href="/models">Model Management</a></p>
           <h1>Live Feed</h1>
           <p>Feeds are served from the running surveillance process.</p>
           {'' if camera_items else '<p>No cameras configured.</p>'}
@@ -538,6 +613,16 @@ python main.py</pre>
               <li>React with <code>👎</code> on a snapshot alert to mark it as <code>no_person</code> directly from Telegram.</li>
             </ul>
             <p>Example: <code>/setstatus 6</code> (every 6 hours), <code>/setstatus off</code> (disable periodic status).</p>
+          </div>
+
+          <h2>8. Model Management (Web UI)</h2>
+          <div class="card">
+            <ul>
+              <li>Open <a href="/models">Model Management</a>.</li>
+              <li>Upload a YOLO <code>.pt</code> model to make it active immediately.</li>
+              <li>Enable "replace base model" if you also want <code>/reload_model</code> to train from this imported model.</li>
+              <li>The imported model is archived under <code>detection_models/yolov8n_imported_&lt;timestamp&gt;.pt</code>.</li>
+            </ul>
           </div>
         </body>
         </html>
@@ -1107,6 +1192,14 @@ python main.py</pre>
             self._send_html(self._render_guide())
             return
 
+        if parsed.path == "/models":
+            query = parse_qs(parsed.query)
+            message = (query.get("msg", [""])[0] or "").strip()
+            ok_raw = (query.get("ok", ["1"])[0] or "1").strip().lower()
+            ok = ok_raw not in {"0", "false", "no"}
+            self._send_html(self._render_models(message=message, ok=ok))
+            return
+
         if parsed.path == "/live":
             self._send_html(self._render_live())
             return
@@ -1153,6 +1246,58 @@ python main.py</pre>
     def do_POST(self) -> None:
         """Handle HTTP POST routes for reviews and dataset moderation."""
         parsed = urlparse(self.path)
+
+        if parsed.path == "/models/import":
+            importer = self.model_importer
+            if importer is None:
+                self.send_error(503, "Model importer unavailable")
+                return
+
+            content_type = self.headers.get("Content-Type", "")
+            if not content_type.startswith("multipart/form-data"):
+                self.send_error(400, "Expected multipart/form-data")
+                return
+
+            form = cgi.FieldStorage(
+                fp=self.rfile,
+                headers=self.headers,
+                environ={
+                    "REQUEST_METHOD": "POST",
+                    "CONTENT_TYPE": content_type,
+                },
+            )
+
+            file_field = form["model_file"] if "model_file" in form else None
+            if file_field is None or not getattr(file_field, "file", None):
+                self._redirect("/models?ok=0&msg=" + quote("Missing model file"))
+                return
+
+            filename = Path(getattr(file_field, "filename", "") or "upload.pt").name
+            if filename.lower().endswith(".pt") is False:
+                self._redirect("/models?ok=0&msg=" + quote("Only .pt files are supported"))
+                return
+
+            replace_base = bool(form.getfirst("replace_base", ""))
+            try:
+                tmp_dir = ROOT / "data" / "tmp"
+                tmp_dir.mkdir(parents=True, exist_ok=True)
+                with NamedTemporaryFile(delete=False, suffix=".pt", prefix="model_upload_", dir=str(tmp_dir)) as tmp:
+                    tmp_path = Path(tmp.name)
+                    shutil.copyfileobj(file_field.file, tmp)
+                ok, message = importer(tmp_path, replace_base)
+            except Exception as exc:
+                ok = False
+                message = f"Model import failed: {exc}"
+            finally:
+                try:
+                    if "tmp_path" in locals() and tmp_path.exists():
+                        tmp_path.unlink()
+                except Exception:
+                    pass
+
+            self._redirect("/models?ok=" + ("1" if ok else "0") + "&msg=" + quote(message))
+            return
+
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length).decode("utf-8", errors="replace")
         form = parse_qs(body)
@@ -1364,6 +1509,8 @@ def create_gallery_server(
     camera_map: dict[int, CameraConfig],
     settings: Settings | None,
     live_frame_provider: Callable[[int], Optional[tuple[int, bytes]]],
+    model_importer: Optional[Callable[[Path, bool], tuple[bool, str]]] = None,
+    model_status_provider: Optional[Callable[[], dict[str, object]]] = None,
 ) -> ThreadingHTTPServer:
     """Create configured gallery HTTP server instance."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1372,6 +1519,8 @@ def create_gallery_server(
     FaceGalleryHandler.camera_map = camera_map
     FaceGalleryHandler.settings = settings
     FaceGalleryHandler.live_frame_provider = live_frame_provider
+    FaceGalleryHandler.model_importer = model_importer
+    FaceGalleryHandler.model_status_provider = model_status_provider
     return ThreadingHTTPServer((host, port), FaceGalleryHandler)
 
 
@@ -1384,6 +1533,8 @@ def start_gallery_server(
     camera_map: dict[int, CameraConfig],
     settings: Settings | None,
     live_frame_provider: Callable[[int], Optional[tuple[int, bytes]]],
+    model_importer: Optional[Callable[[Path, bool], tuple[bool, str]]] = None,
+    model_status_provider: Optional[Callable[[], dict[str, object]]] = None,
 ) -> tuple[ThreadingHTTPServer, threading.Thread]:
     """Create and start gallery server in a background thread."""
     server = create_gallery_server(
@@ -1394,6 +1545,8 @@ def start_gallery_server(
         camera_map=camera_map,
         settings=settings,
         live_frame_provider=live_frame_provider,
+        model_importer=model_importer,
+        model_status_provider=model_status_provider,
     )
     thread = threading.Thread(target=server.serve_forever, name="face-gallery", daemon=True)
     thread.start()

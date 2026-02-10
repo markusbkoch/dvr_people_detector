@@ -101,6 +101,7 @@ python main.py
 Then open `http://127.0.0.1:8765`.
 
 - Built-in guide: `http://127.0.0.1:8765/guide`
+- Model management: `http://127.0.0.1:8765/models` (upload `.pt`, optionally replace base model)
 - `Snapshot Review` page shows all snapshots (not just face-detected samples).
 - `Live Feed` page reads in-memory frames from the running surveillance process (no extra RTSP sessions and no disk handoff).
 - For each snapshot you can:
@@ -168,6 +169,13 @@ Model update behavior (`/reload_model`):
 - Step 2: trains YOLO and writes a new run under `data/detector_training/`.
 - Step 3: copies `best.pt` to `detection_models/yolov8n_<timestamp>.pt` and to `detection_models/yolov8n.pt`.
 - Step 4: reloads workers with `detection_models/yolov8n.pt`.
+
+Model import behavior (Web UI `/models`):
+
+- Uploads a `.pt` model file.
+- Promotes it to active model (`detection_models/yolov8n.pt`) immediately.
+- Archives it as `detection_models/yolov8n_imported_<timestamp>.pt`.
+- Optional checkbox also replaces `detection_models/yolov8n_base.pt` used by `/reload_model`.
 
 `/status` includes:
 

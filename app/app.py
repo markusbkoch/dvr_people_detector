@@ -413,6 +413,56 @@ class SurveillanceApp:
         with self._model_update_lock:
             return self._model_update_thread is not None and self._model_update_thread.is_alive()
 
+    def get_model_management_status(self) -> dict[str, object]:
+        """Return current managed-model status for UI/ops surfaces."""
+        return {
+            "active_model": str(self._active_model_path),
+            "base_model": str(self._base_model_path),
+            "generation": self._current_model_generation(),
+            "update_running": self._model_update_running(),
+            "loaded_model": self._current_model_name(),
+        }
+
+    def import_model_file(self, source_path: Path, replace_base: bool = False) -> tuple[bool, str]:
+        """Import model weights and reload workers by bumping model generation."""
+        if self._model_update_running():
+            return False, "Model update is already running. Try again after it finishes."
+
+        path = Path(source_path)
+        if not path.exists() or not path.is_file():
+            return False, f"Uploaded model file not found: {path}"
+        if path.suffix.lower() != ".pt":
+            return False, "Only .pt model files are supported."
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        archived_path = self._model_dir / f"yolov8n_imported_{timestamp}.pt"
+
+        try:
+            # Validate weights before promotion to avoid breaking active workers.
+            YOLO(str(path))
+            shutil.copy2(str(path), str(archived_path))
+            shutil.copy2(str(path), str(self._active_model_path))
+            if replace_base:
+                shutil.copy2(str(path), str(self._base_model_path))
+            self._set_model_name(str(self._active_model_path))
+            generation = self._bump_model_generation()
+            logger.info(
+                "Imported YOLO model via web UI | source=%s | archived=%s | active=%s | base_replaced=%s | generation=%d",
+                path,
+                archived_path,
+                self._active_model_path,
+                replace_base,
+                generation,
+            )
+            return (
+                True,
+                "Model imported successfully. "
+                f"Archived as {archived_path.name}. Generation is now {generation}."
+            )
+        except Exception as exc:
+            logger.exception("Failed importing YOLO model from %s", path)
+            return False, f"Failed to import model: {exc}"
+
     def _start_model_update(self, requested_model: str) -> bool:
         """Start background export+train+reload workflow."""
         with self._model_update_lock:

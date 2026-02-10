@@ -76,6 +76,8 @@ def main() -> None:
         camera_map=build_camera_map(settings),
         settings=settings,
         live_frame_provider=app.get_live_preview_frame,
+        model_importer=app.import_model_file,
+        model_status_provider=app.get_model_management_status,
     )
     logging.info("Face gallery: http://%s:%d", gallery_host, gallery_port)
     try:
