@@ -44,6 +44,8 @@ class RtspCamera:
         self.reconnect_seconds = reconnect_seconds
         self.rtsp_transport = rtsp_transport
         self._capture: Optional[cv2.VideoCapture] = None
+        self._consecutive_failures = 0
+        self._max_backoff_seconds = 60.0
 
     def _open(self) -> None:
         """Open the RTSP capture handle with transport-specific FFmpeg options."""
@@ -82,10 +84,18 @@ class RtspCamera:
 
         ok, frame = self._capture.read()
         if ok and frame is not None:
+            self._consecutive_failures = 0  # Reset on success
             return CameraFrame(camera=self.camera, frame=frame, captured_at=time.time())
 
+        self._consecutive_failures += 1
         self.release()
-        time.sleep(self.reconnect_seconds)
+        
+        # Exponential backoff: base * 2^failures, capped at max
+        backoff = min(
+            self.reconnect_seconds * (2 ** min(self._consecutive_failures - 1, 5)),
+            self._max_backoff_seconds,
+        )
+        time.sleep(backoff)
         return None
 
     def release(self) -> None:
