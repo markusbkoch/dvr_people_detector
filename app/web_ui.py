@@ -98,6 +98,52 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def _send_json(self, data: dict, status: int = 200) -> None:
+        """Send JSON response."""
+        import json
+        body = json.dumps(data, indent=2).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_health(self) -> None:
+        """Return health check response with system status."""
+        # Count snapshots
+        snapshot_count = len(self._all_snapshots())
+        
+        # Get camera status from live frame provider
+        cameras_ok = 0
+        cameras_total = len(self.camera_map)
+        for cam_id in self.camera_map:
+            if self.live_frame_provider:
+                frame = self.live_frame_provider(cam_id)
+                if frame is not None:
+                    cameras_ok += 1
+        
+        # Get model status (mask absolute paths)
+        model_status = {}
+        if self.model_status_provider:
+            raw_status = self.model_status_provider()
+            for key, value in raw_status.items():
+                if isinstance(value, str) and "/" in value:
+                    # Only show filename, not full path
+                    model_status[key] = Path(value).name
+                else:
+                    model_status[key] = value
+        
+        health = {
+            "status": "ok" if cameras_ok > 0 else "degraded",
+            "cameras": {
+                "total": cameras_total,
+                "active": cameras_ok,
+            },
+            "snapshots": snapshot_count,
+            "model": model_status,
+        }
+        self._send_json(health)
+
     def _redirect(self, location: str) -> None:
         """Issue HTTP redirect response."""
         self.send_response(303)
@@ -1182,6 +1228,10 @@ python main.py</pre>
 
         if parsed.path == "/":
             self._send_html(self._render_root())
+            return
+
+        if parsed.path == "/health":
+            self._send_health()
             return
 
         if parsed.path == "/people":
