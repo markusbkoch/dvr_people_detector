@@ -131,6 +131,10 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
             {nav_item("/people", "People", "people", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>')}
             {nav_item("/models", "Models", "models", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>')}
             {nav_item("/guide", "Guide", "guide", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>')}
+            <button class="theme-toggle" id="theme-toggle" type="button" title="Toggle dark mode">
+              <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
           </div>
         </nav>
         """
@@ -157,16 +161,38 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
             --card-bg: rgba(255, 255, 255, 0.92);
             --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             --nav-height: 60px;
+            --nav-bg: rgba(255, 255, 255, 0.85);
+            --gradient-1: #dbeafe;
+            --gradient-2: #fef3c7;
+          }
+          [data-theme="dark"] {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --ink-primary: #f1f5f9;
+            --ink-secondary: #cbd5e1;
+            --ink-muted: #94a3b8;
+            --accent: #3b82f6;
+            --accent-light: #60a5fa;
+            --accent-bg: rgba(59, 130, 246, 0.15);
+            --stroke: rgba(148, 163, 184, 0.2);
+            --stroke-strong: #475569;
+            --card-bg: rgba(30, 41, 59, 0.95);
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+            --nav-bg: rgba(15, 23, 42, 0.9);
+            --gradient-1: #1e3a5f;
+            --gradient-2: #422006;
           }
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
             font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: radial-gradient(ellipse at top left, #dbeafe 0%, transparent 50%),
-                        radial-gradient(ellipse at bottom right, #fef3c7 0%, transparent 50%),
+            background: radial-gradient(ellipse at top left, var(--gradient-1) 0%, transparent 50%),
+                        radial-gradient(ellipse at bottom right, var(--gradient-2) 0%, transparent 50%),
                         var(--bg-primary);
             color: var(--ink-primary);
             min-height: 100vh;
             padding-top: var(--nav-height);
+            transition: background 200ms ease, color 200ms ease;
           }
           .main-nav {
             position: fixed;
@@ -174,7 +200,7 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
             left: 0;
             right: 0;
             height: var(--nav-height);
-            background: rgba(255, 255, 255, 0.85);
+            background: var(--nav-bg);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border-bottom: 1px solid var(--stroke);
@@ -183,6 +209,7 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
             justify-content: space-between;
             padding: 0 24px;
             z-index: 1000;
+            transition: background 200ms ease;
           }
           .nav-brand {
             display: flex;
@@ -285,12 +312,61 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
             background: var(--error);
             color: white;
           }
+          .theme-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border: none;
+            border-radius: 8px;
+            background: var(--accent-bg);
+            color: var(--accent);
+            cursor: pointer;
+            margin-left: 8px;
+            transition: all 150ms ease;
+          }
+          .theme-toggle:hover {
+            background: var(--accent);
+            color: white;
+          }
+          .theme-toggle svg {
+            width: 18px;
+            height: 18px;
+          }
+          .theme-toggle .icon-moon { display: none; }
+          [data-theme="dark"] .theme-toggle .icon-sun { display: none; }
+          [data-theme="dark"] .theme-toggle .icon-moon { display: block; }
           @media (max-width: 768px) {
             .nav-item span { display: none; }
             .nav-item { padding: 8px 10px; }
             .shell { padding: 16px; }
           }
         </style>
+        <script>
+          (function() {
+            const stored = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (stored === 'dark' || (!stored && prefersDark)) {
+              document.documentElement.setAttribute('data-theme', 'dark');
+            }
+            document.addEventListener('DOMContentLoaded', function() {
+              const toggle = document.getElementById('theme-toggle');
+              if (toggle) {
+                toggle.addEventListener('click', function() {
+                  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                  if (isDark) {
+                    document.documentElement.removeAttribute('data-theme');
+                    localStorage.setItem('theme', 'light');
+                  } else {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                    localStorage.setItem('theme', 'dark');
+                  }
+                });
+              }
+            });
+          })();
+        </script>
         """
 
     def _send_health(self) -> None:
