@@ -109,6 +109,190 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _render_nav(self, active: str = "") -> str:
+        """Render unified navigation bar HTML."""
+        def nav_item(href: str, label: str, key: str, icon: str) -> str:
+            active_class = " active" if active == key else ""
+            return f'<a class="nav-item{active_class}" href="{href}">{icon}<span>{label}</span></a>'
+
+        return f"""
+        <nav class="main-nav">
+          <div class="nav-brand">
+            <svg class="nav-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+            <span class="nav-title">DVR Console</span>
+          </div>
+          <div class="nav-links">
+            {nav_item("/", "Dashboard", "home", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>')}
+            {nav_item("/live", "Live", "live", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>')}
+            {nav_item("/snapshots", "Snapshots", "snapshots", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>')}
+            {nav_item("/people", "People", "people", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>')}
+            {nav_item("/models", "Models", "models", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>')}
+            {nav_item("/guide", "Guide", "guide", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>')}
+          </div>
+        </nav>
+        """
+
+    def _shared_styles(self) -> str:
+        """Return shared CSS styles for all pages."""
+        return """
+        <style>
+          :root {
+            --bg-primary: #f3f7fe;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f8fafc;
+            --ink-primary: #0f172a;
+            --ink-secondary: #475569;
+            --ink-muted: #64748b;
+            --accent: #2563eb;
+            --accent-light: #3b82f6;
+            --accent-bg: rgba(37, 99, 235, 0.08);
+            --stroke: rgba(148, 163, 184, 0.35);
+            --stroke-strong: #cbd5e1;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --card-bg: rgba(255, 255, 255, 0.92);
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --nav-height: 60px;
+          }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body {
+            font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(ellipse at top left, #dbeafe 0%, transparent 50%),
+                        radial-gradient(ellipse at bottom right, #fef3c7 0%, transparent 50%),
+                        var(--bg-primary);
+            color: var(--ink-primary);
+            min-height: 100vh;
+            padding-top: var(--nav-height);
+          }
+          .main-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--nav-height);
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--stroke);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            z-index: 1000;
+          }
+          .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--ink-primary);
+          }
+          .nav-logo {
+            width: 28px;
+            height: 28px;
+            color: var(--accent);
+          }
+          .nav-links {
+            display: flex;
+            gap: 4px;
+          }
+          .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--ink-secondary);
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 150ms ease;
+          }
+          .nav-item:hover {
+            background: var(--accent-bg);
+            color: var(--accent);
+          }
+          .nav-item.active {
+            background: var(--accent);
+            color: white;
+          }
+          .nav-item svg {
+            width: 18px;
+            height: 18px;
+          }
+          .shell {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 24px;
+          }
+          .page-header {
+            margin-bottom: 24px;
+          }
+          .page-header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+          }
+          .page-header p {
+            color: var(--ink-muted);
+            font-size: 0.95rem;
+          }
+          .card {
+            background: var(--card-bg);
+            border: 1px solid var(--stroke);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--card-shadow);
+          }
+          .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border: 1px solid var(--stroke-strong);
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            color: var(--ink-primary);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 150ms ease;
+          }
+          .btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+          }
+          .btn-primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+          }
+          .btn-primary:hover {
+            background: var(--accent-light);
+            border-color: var(--accent-light);
+            color: white;
+          }
+          .btn-danger {
+            border-color: var(--error);
+            color: var(--error);
+          }
+          .btn-danger:hover {
+            background: var(--error);
+            color: white;
+          }
+          @media (max-width: 768px) {
+            .nav-item span { display: none; }
+            .nav-item { padding: 8px 10px; }
+            .shell { padding: 16px; }
+          }
+        </style>
+        """
+
     def _send_health(self) -> None:
         """Return health check response with system status."""
         # Count snapshots
@@ -275,90 +459,73 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>Face & Snapshot Review</title>
+          <title>DVR Console - Dashboard</title>
+          {self._shared_styles()}
           <style>
-            :root {{
-              --bg-1: #f0f5ff;
-              --bg-2: #fff7ec;
-              --ink: #0f172a;
-              --muted: #475569;
-              --card: rgba(255, 255, 255, 0.84);
-              --stroke: rgba(148, 163, 184, 0.35);
-              --accent: #1d4ed8;
-            }}
-            * {{ box-sizing: border-box; }}
-            body {{
-              font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif;
-              margin: 0;
-              color: var(--ink);
-              background:
-                radial-gradient(1200px 520px at 0% -10%, #bfdbfe 0%, transparent 60%),
-                radial-gradient(900px 520px at 100% 0%, #fed7aa 0%, transparent 55%),
-                linear-gradient(160deg, var(--bg-1), var(--bg-2));
-              min-height: 100vh;
-              padding: 30px 24px 48px;
-            }}
-            .shell {{ max-width: 1140px; margin: 0 auto; }}
             .hero {{
               display: grid;
               grid-template-columns: 1.3fr 1fr;
+              gap: 16px;
+              margin-bottom: 24px;
+            }}
+            .hero-text h1 {{ font-size: clamp(1.5rem, 2.8vw, 2rem); margin-bottom: 8px; }}
+            .hero-text p {{ color: var(--ink-muted); }}
+            .stats-grid {{
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 12px;
+            }}
+            .stat-card {{
+              background: var(--accent-bg);
+              border: 1px solid rgba(37, 99, 235, 0.2);
+              border-radius: 10px;
+              padding: 14px;
+              text-align: center;
+            }}
+            .stat-value {{ font-size: 1.5rem; font-weight: 700; color: var(--accent); }}
+            .stat-label {{ font-size: 0.8rem; color: var(--ink-muted); margin-top: 2px; }}
+            .quick-links {{
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+              gap: 16px;
+            }}
+            .link-card {{
+              display: flex;
+              align-items: flex-start;
               gap: 14px;
-              margin-bottom: 14px;
-            }}
-            .panel {{
-              backdrop-filter: blur(10px);
-              background: var(--card);
-              border: 1px solid var(--stroke);
-              border-radius: 16px;
-              padding: 16px;
-              box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-            }}
-            .eyebrow {{
-              display: inline-block;
-              font-size: 12px;
-              letter-spacing: 0.08em;
-              text-transform: uppercase;
-              color: var(--accent);
-              font-weight: 700;
-            }}
-            h1 {{ margin: 8px 0 6px; font-size: clamp(1.5rem, 2.8vw, 2.3rem); line-height: 1.12; }}
-            .lead {{ margin: 0; color: var(--muted); font-size: 0.98rem; }}
-            .stats {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }}
-            .stat {{
-              border-radius: 12px;
-              border: 1px solid rgba(191, 219, 254, 0.8);
-              background: rgba(219, 234, 254, 0.55);
-              padding: 10px;
-            }}
-            .stat-k {{ font-size: 1.1rem; font-weight: 700; }}
-            .stat-v {{ color: #1e3a8a; font-size: 0.8rem; }}
-            .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }}
-            .card {{
-              display: block;
+              padding: 20px;
               text-decoration: none;
               color: inherit;
-              background: var(--card);
-              border: 1px solid var(--stroke);
-              border-radius: 14px;
-              padding: 14px;
-              transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+              transition: transform 150ms ease, box-shadow 150ms ease;
             }}
-            .card:hover {{
+            .link-card:hover {{
               transform: translateY(-2px);
-              border-color: rgba(59, 130, 246, 0.55);
-              box-shadow: 0 16px 26px rgba(30, 64, 175, 0.12);
+              box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
             }}
-            .title {{ font-size: 1.02rem; font-weight: 700; margin-bottom: 4px; }}
-            .sub {{ color: var(--muted); font-size: 0.9rem; line-height: 1.35; }}
-            .tag {{
+            .link-icon {{
+              width: 44px;
+              height: 44px;
+              border-radius: 10px;
+              background: var(--accent-bg);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              flex-shrink: 0;
+            }}
+            .link-icon svg {{ width: 22px; height: 22px; color: var(--accent); }}
+            .link-content h3 {{ font-size: 1rem; font-weight: 600; margin-bottom: 4px; }}
+            .link-content p {{ font-size: 0.875rem; color: var(--ink-muted); line-height: 1.4; }}
+            .link-tag {{
               display: inline-block;
               margin-top: 8px;
-              padding: 3px 8px;
+              padding: 3px 10px;
+              background: var(--bg-tertiary);
               border-radius: 999px;
-              background: rgba(37, 99, 235, 0.12);
-              color: #1d4ed8;
-              font-size: 0.75rem;
-              font-weight: 700;
+              font-size: 0.7rem;
+              font-weight: 600;
+              color: var(--ink-secondary);
+              text-transform: uppercase;
+              letter-spacing: 0.03em;
             }}
             @media (max-width: 900px) {{
               .hero {{ grid-template-columns: 1fr; }}
@@ -366,49 +533,105 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
           </style>
         </head>
         <body>
+          {self._render_nav("home")}
           <div class="shell">
             <section class="hero">
-              <div class="panel">
-                <span class="eyebrow">Surveillance Console</span>
-                <h1>Face & Snapshot Review</h1>
-                <p class="lead">Operational dashboard for live monitoring, detector feedback, identity curation, and model lifecycle management.</p>
+              <div class="card hero-text">
+                <h1>Surveillance Dashboard</h1>
+                <p>Monitor live feeds, review detections, manage identities, and control model lifecycle.</p>
               </div>
-              <div class="panel">
-                <div class="stats">
-                  <div class="stat"><div class="stat-k">{snapshot_count}</div><div class="stat-v">Snapshots</div></div>
-                  <div class="stat"><div class="stat-k">{reviewed_snapshots}</div><div class="stat-v">Reviewed</div></div>
-                  <div class="stat"><div class="stat-k">{person_count}</div><div class="stat-v">People</div></div>
-                  <div class="stat"><div class="stat-k">{len(self.camera_map)}</div><div class="stat-v">Cameras</div></div>
+              <div class="card">
+                <div class="stats-grid">
+                  <div class="stat-card">
+                    <div class="stat-value">{snapshot_count}</div>
+                    <div class="stat-label">Snapshots</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-value">{reviewed_snapshots}</div>
+                    <div class="stat-label">Reviewed</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-value">{person_count}</div>
+                    <div class="stat-label">People</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-value">{len(self.camera_map)}</div>
+                    <div class="stat-label">Cameras</div>
+                  </div>
                 </div>
               </div>
             </section>
-            <div class="cards">
-            <a class="card" href="/snapshots">
-              <div class="title">Snapshot Review</div>
-              <div class="sub">{snapshot_count} snapshots · {reviewed_snapshots} reviewed</div>
-              <span class="tag">Feedback Loop 1</span>
-            </a>
-            <a class="card" href="/people">
-              <div class="title">People Gallery</div>
-              <div class="sub">{person_count} people · {face_sample_count} face samples</div>
-              <span class="tag">Identity Curation</span>
-            </a>
-            <a class="card" href="/live">
-              <div class="title">Live Feed</div>
-              <div class="sub">{len(self.camera_map)} camera feeds in browser</div>
-              <span class="tag">Operations</span>
-            </a>
-            <a class="card" href="/guide">
-              <div class="title">User Guide</div>
-              <div class="sub">System setup, parameters, review workflow and training export</div>
-              <span class="tag">Documentation</span>
-            </a>
-            <a class="card" href="/models">
-              <div class="title">Model Management</div>
-              <div class="sub">Import a YOLO .pt file and switch active/base model</div>
-              <span class="tag">Model Ops</span>
-            </a>
-          </div>
+            <div class="quick-links">
+              <a class="card link-card" href="/live">
+                <div class="link-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="23 7 16 12 23 17 23 7"/>
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                  </svg>
+                </div>
+                <div class="link-content">
+                  <h3>Live Feed</h3>
+                  <p>{len(self.camera_map)} camera streams with real-time monitoring</p>
+                  <span class="link-tag">Operations</span>
+                </div>
+              </a>
+              <a class="card link-card" href="/snapshots">
+                <div class="link-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                </div>
+                <div class="link-content">
+                  <h3>Snapshot Review</h3>
+                  <p>{snapshot_count} snapshots · {reviewed_snapshots} reviewed</p>
+                  <span class="link-tag">Feedback Loop</span>
+                </div>
+              </a>
+              <a class="card link-card" href="/people">
+                <div class="link-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                </div>
+                <div class="link-content">
+                  <h3>People Gallery</h3>
+                  <p>{person_count} people · {face_sample_count} face samples</p>
+                  <span class="link-tag">Identity Curation</span>
+                </div>
+              </a>
+              <a class="card link-card" href="/models">
+                <div class="link-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                    <polyline points="2 17 12 22 22 17"/>
+                    <polyline points="2 12 12 17 22 12"/>
+                  </svg>
+                </div>
+                <div class="link-content">
+                  <h3>Model Management</h3>
+                  <p>Import YOLO models and manage active/base model</p>
+                  <span class="link-tag">Model Ops</span>
+                </div>
+              </a>
+              <a class="card link-card" href="/guide">
+                <div class="link-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                  </svg>
+                </div>
+                <div class="link-content">
+                  <h3>User Guide</h3>
+                  <p>System setup, parameters, and review workflow documentation</p>
+                  <span class="link-tag">Docs</span>
+                </div>
+              </a>
+            </div>
           </div>
         </body>
         </html>
@@ -439,57 +662,91 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>Model Management</title>
+          <title>DVR Console - Models</title>
+          {self._shared_styles()}
           <style>
-            :root {{
-              --bg: #f4f8ff;
-              --ink: #0f172a;
-              --muted: #475569;
-              --card: #ffffff;
-              --stroke: #dbe4f0;
+            .status-grid {{
+              display: grid;
+              grid-template-columns: 180px 1fr;
+              gap: 12px 16px;
+              align-items: center;
             }}
-            * {{ box-sizing: border-box; }}
-            body {{ font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif; margin: 0; background: radial-gradient(800px 400px at 0% 0%, #dbeafe 0%, transparent 60%), var(--bg); color: var(--ink); padding: 26px 22px 40px; }}
-            .shell {{ max-width: 1020px; margin: 0 auto; }}
-            a {{ color: #1d4ed8; text-decoration: none; }}
-            .top {{ margin-bottom: 10px; color: var(--muted); }}
-            .card {{ background: var(--card); border: 1px solid var(--stroke); border-radius: 16px; padding: 16px; margin-top: 12px; box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06); }}
-            h1 {{ margin: 4px 0 6px; }}
-            h2 {{ margin: 2px 0 10px; font-size: 1.12rem; }}
-            .status-grid {{ display: grid; grid-template-columns: 200px 1fr; gap: 9px 10px; }}
-            code {{ background: #eef2f7; padding: 2px 6px; border-radius: 6px; word-break: break-all; }}
-            .msg {{ border-radius: 10px; padding: 11px 12px; margin: 10px 0 0 0; }}
-            .msg.ok {{ background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }}
-            .msg.err {{ background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }}
-            form {{ display: grid; gap: 10px; max-width: 680px; }}
-            input[type="file"] {{ padding: 8px; border: 1px solid var(--stroke); border-radius: 10px; background: #f8fbff; }}
-            button {{ width: fit-content; padding: 10px 14px; border: 1px solid #bfdbfe; border-radius: 10px; background: linear-gradient(180deg, #eff6ff, #dbeafe); color: #1e3a8a; font-weight: 700; cursor: pointer; }}
-            .help {{ color: var(--muted); font-size: 14px; margin: 0 0 4px; }}
+            .status-grid dt {{ font-weight: 600; color: var(--ink-secondary); }}
+            .status-grid dd {{ margin: 0; }}
+            .status-grid code {{
+              background: var(--bg-tertiary);
+              padding: 4px 8px;
+              border-radius: 6px;
+              font-size: 0.875rem;
+              word-break: break-all;
+            }}
+            .section {{ margin-bottom: 20px; }}
+            .section h2 {{ font-size: 1.1rem; margin-bottom: 12px; }}
+            .section p {{ color: var(--ink-muted); font-size: 0.9rem; margin-bottom: 12px; }}
+            .upload-form {{ display: flex; flex-direction: column; gap: 12px; }}
+            .upload-form input[type="file"] {{
+              padding: 12px;
+              border: 2px dashed var(--stroke-strong);
+              border-radius: 10px;
+              background: var(--bg-tertiary);
+              cursor: pointer;
+            }}
+            .upload-form input[type="file"]:hover {{ border-color: var(--accent); }}
+            .upload-form label {{
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              font-size: 0.9rem;
+              color: var(--ink-secondary);
+            }}
+            .msg {{
+              border-radius: 8px;
+              padding: 12px 16px;
+              margin-top: 16px;
+              font-size: 0.9rem;
+            }}
+            .msg.ok {{
+              background: rgba(16, 185, 129, 0.1);
+              border: 1px solid var(--success);
+              color: #065f46;
+            }}
+            .msg.err {{
+              background: rgba(239, 68, 68, 0.1);
+              border: 1px solid var(--error);
+              color: #991b1b;
+            }}
           </style>
         </head>
         <body>
+          {self._render_nav("models")}
           <div class="shell">
-          <p class="top"><a href="/">← Home</a> · <a href="/guide">Guide</a></p>
-          <h1>Model Management</h1>
-          <div class="card">
-            <div class="status-grid">
-              <div><strong>Active model</strong></div><div><code>{active_model}</code></div>
-              <div><strong>Loaded by workers</strong></div><div><code>{loaded_model}</code></div>
-              <div><strong>Base model</strong></div><div><code>{base_model}</code></div>
-              <div><strong>Generation</strong></div><div><code>{generation}</code></div>
-              <div><strong>Update running</strong></div><div><code>{update_running}</code></div>
+            <div class="page-header">
+              <h1>Model Management</h1>
+              <p>Import and manage YOLO detection models</p>
             </div>
-          </div>
-          <div class="card">
-            <h2>Import New Model</h2>
-            <p class="help">Upload a <code>.pt</code> file to replace the active model immediately. Optionally also replace the base model used by <code>/reload_model</code>.</p>
-            <form method="post" action="/models/import" enctype="multipart/form-data">
-              <input type="file" name="model_file" accept=".pt" required />
-              <label><input type="checkbox" name="replace_base" value="1" /> Also replace base model (<code>detection_models/yolov8n_base.pt</code>)</label>
-              <button type="submit">Import Model</button>
-            </form>
-            {message_html}
-          </div>
+            <div class="card section">
+              <h2>Current Status</h2>
+              <dl class="status-grid">
+                <dt>Active model</dt><dd><code>{active_model}</code></dd>
+                <dt>Loaded by workers</dt><dd><code>{loaded_model}</code></dd>
+                <dt>Base model</dt><dd><code>{base_model}</code></dd>
+                <dt>Generation</dt><dd><code>{generation}</code></dd>
+                <dt>Update running</dt><dd><code>{update_running}</code></dd>
+              </dl>
+            </div>
+            <div class="card section">
+              <h2>Import New Model</h2>
+              <p>Upload a <code>.pt</code> file to replace the active model immediately. Optionally also replace the base model used by <code>/reload_model</code>.</p>
+              <form class="upload-form" method="post" action="/models/import" enctype="multipart/form-data">
+                <input type="file" name="model_file" accept=".pt" required />
+                <label>
+                  <input type="checkbox" name="replace_base" value="1" />
+                  Also replace base model
+                </label>
+                <button class="btn btn-primary" type="submit">Import Model</button>
+              </form>
+              {message_html}
+            </div>
           </div>
         </body>
         </html>
@@ -519,72 +776,101 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>Live Feed</title>
+          <title>DVR Console - Live</title>
+          {self._shared_styles()}
           <style>
-            :root {{
-              --ink: #0b1220;
-              --muted: #64748b;
-              --card: rgba(255, 255, 255, 0.92);
-              --stroke: rgba(148, 163, 184, 0.35);
-              --accent: #2563eb;
-            }}
-            * {{ box-sizing: border-box; }}
-            body {{
-              font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif;
-              margin: 0;
-              background:
-                radial-gradient(900px 500px at 0% -20%, #bfdbfe 0%, transparent 60%),
-                radial-gradient(900px 500px at 100% -20%, #fde68a 0%, transparent 55%),
-                #eff4fb;
-              color: var(--ink);
-              padding: 24px 20px 36px;
-            }}
-            .shell {{ max-width: 1240px; margin: 0 auto; }}
-            a {{ color: #1d4ed8; text-decoration: none; }}
-            .top {{ color: var(--muted); margin-bottom: 8px; }}
-            .hero {{
-              margin-bottom: 10px;
-              background: var(--card);
+            .viewer {{
+              background: var(--card-bg);
               border: 1px solid var(--stroke);
-              border-radius: 16px;
-              padding: 12px 14px;
-              box-shadow: 0 18px 34px rgba(15, 23, 42, 0.07);
-            }}
-            .hero h1 {{ margin: 4px 0; font-size: clamp(1.2rem, 2.4vw, 1.9rem); }}
-            .hero p {{ margin: 0; color: var(--muted); }}
-            .viewer {{ background: var(--card); border: 1px solid var(--stroke); border-radius: 14px; padding: 12px; box-shadow: 0 18px 34px rgba(15, 23, 42, 0.08); }}
-            .viewer img {{ width: 100%; max-height: 70vh; object-fit: contain; background: #070b14; border-radius: 10px; }}
-            .viewer-top {{ display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 8px; }}
-            .viewer-title {{ font-weight: 800; }}
-            .viewer-help {{ color: var(--muted); font-size: 0.9rem; }}
-            .thumbs {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; }}
-            .thumb {{
-              border: 1px solid var(--stroke);
-              background: rgba(255, 255, 255, 0.78);
               border-radius: 12px;
-              padding: 6px;
+              padding: 16px;
+              margin-bottom: 16px;
+              box-shadow: var(--card-shadow);
+            }}
+            .viewer img {{
+              width: 100%;
+              max-height: 65vh;
+              object-fit: contain;
+              background: #0a0a0a;
+              border-radius: 8px;
+            }}
+            .viewer-top {{
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 12px;
+            }}
+            .viewer-title {{
+              font-weight: 700;
+              font-size: 1.1rem;
+            }}
+            .viewer-help {{
+              color: var(--ink-muted);
+              font-size: 0.85rem;
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            }}
+            .viewer-help kbd {{
+              background: var(--bg-tertiary);
+              border: 1px solid var(--stroke);
+              border-radius: 4px;
+              padding: 2px 6px;
+              font-size: 0.75rem;
+              font-family: inherit;
+            }}
+            .thumbs {{
+              display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+              gap: 12px;
+            }}
+            .thumb {{
+              border: 2px solid transparent;
+              background: var(--card-bg);
+              border-radius: 10px;
+              padding: 8px;
               cursor: pointer;
               text-align: left;
-              transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+              transition: all 150ms ease;
+              box-shadow: var(--card-shadow);
             }}
-            .thumb:hover {{ transform: translateY(-2px); box-shadow: 0 10px 16px rgba(15, 23, 42, 0.1); }}
-            .thumb.active {{ border-color: var(--accent); box-shadow: 0 0 0 2px #bfdbfe; }}
-            .thumb img {{ width: 100%; height: 108px; object-fit: cover; border-radius: 8px; background: #111; display: block; }}
-            .thumb-label {{ display: block; margin-top: 6px; font-size: 0.86rem; color: #243041; font-weight: 600; }}
+            .thumb:hover {{
+              transform: translateY(-2px);
+              box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            }}
+            .thumb.active {{
+              border-color: var(--accent);
+              box-shadow: 0 0 0 3px var(--accent-bg);
+            }}
+            .thumb img {{
+              width: 100%;
+              height: 120px;
+              object-fit: cover;
+              border-radius: 6px;
+              background: #1a1a1a;
+              display: block;
+            }}
+            .thumb-label {{
+              display: block;
+              margin-top: 8px;
+              font-size: 0.85rem;
+              font-weight: 600;
+              color: var(--ink-primary);
+            }}
           </style>
         </head>
         <body>
+          {self._render_nav("live")}
           <div class="shell">
-          <p class="top"><a href="/">← Home</a> · <a href="/snapshots">Snapshot Review</a> · <a href="/people">People Gallery</a> · <a href="/models">Model Management</a></p>
-          <section class="hero">
-            <h1>Live Feed</h1>
-            <p>Real-time per-camera monitoring with keyboard navigation (← / →).</p>
-          </section>
-          {'' if camera_items else '<p>No cameras configured.</p>'}
+            <div class="page-header">
+              <h1>Live Feed</h1>
+              <p>Real-time camera monitoring with keyboard navigation</p>
+            </div>
+          {'' if camera_items else '<p class="card">No cameras configured.</p>'}
           <section class="viewer" id="viewer" style="display:{'block' if camera_items else 'none'};">
             <div class="viewer-top">
               <div class="viewer-title" id="viewer-title"></div>
-              <div class="viewer-help">Use ← / → to switch cameras</div>
+              <div class="viewer-help"><kbd>←</kbd> <kbd>→</kbd> to switch cameras</div>
             </div>
             <img id="viewer-image" src="" alt="live focused camera" loading="eager" />
           </section>
@@ -718,32 +1004,60 @@ class FaceGalleryHandler(BaseHTTPRequestHandler):
 
     def _render_guide(self) -> str:
         """Render HTML user guide for surveillance and review workflows."""
-        return """
+        return f"""
         <html>
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>User Guide</title>
+          <title>DVR Console - Guide</title>
+          {self._shared_styles()}
           <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; background: #f6f7f9; color: #111; line-height: 1.45; }
-            h1, h2 { margin: 0 0 10px 0; }
-            h2 { margin-top: 18px; }
-            p { margin: 8px 0; color: #333; }
-            ul { margin: 8px 0 12px 20px; }
-            li { margin: 4px 0; }
-            code { background: #eef2f7; padding: 2px 6px; border-radius: 6px; }
-            pre { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 10px; overflow-x: auto; }
-            .card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-top: 10px; }
-            table { width: 100%; border-collapse: collapse; background: white; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
-            th, td { text-align: left; padding: 10px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
-            th { background: #f8fafc; font-weight: 600; }
-            tr:last-child td { border-bottom: none; }
-            a { color: #2563eb; text-decoration: none; }
+            .guide-content h2 {{ margin: 28px 0 12px; font-size: 1.15rem; }}
+            .guide-content h2:first-child {{ margin-top: 0; }}
+            .guide-content p {{ color: var(--ink-secondary); line-height: 1.6; margin: 8px 0; }}
+            .guide-content ul {{ margin: 8px 0 16px 24px; color: var(--ink-secondary); }}
+            .guide-content li {{ margin: 6px 0; line-height: 1.5; }}
+            .guide-content code {{ background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 0.875em; }}
+            .guide-content pre {{
+              background: #1e293b;
+              color: #e2e8f0;
+              padding: 16px;
+              border-radius: 8px;
+              overflow-x: auto;
+              font-size: 0.875rem;
+              margin: 12px 0;
+            }}
+            .guide-content .card {{ margin: 12px 0 20px; }}
+            .guide-content table {{
+              width: 100%;
+              border-collapse: collapse;
+              background: var(--bg-secondary);
+              border: 1px solid var(--stroke);
+              border-radius: 8px;
+              overflow: hidden;
+              font-size: 0.875rem;
+              margin: 12px 0;
+            }}
+            .guide-content th, .guide-content td {{
+              text-align: left;
+              padding: 10px 12px;
+              border-bottom: 1px solid var(--stroke);
+              vertical-align: top;
+            }}
+            .guide-content th {{ background: var(--bg-tertiary); font-weight: 600; }}
+            .guide-content tr:last-child td {{ border-bottom: none; }}
+            a {{ color: var(--accent); text-decoration: none; }}
+            a:hover {{ text-decoration: underline; }}
           </style>
         </head>
         <body>
-          <p><a href="/">← Home</a> · <a href="/snapshots">Snapshot Review</a> · <a href="/people">People Gallery</a></p>
-          <h1>Surveillance User Guide</h1>
+          {self._render_nav("guide")}
+          <div class="shell">
+            <div class="page-header">
+              <h1>User Guide</h1>
+              <p>System setup, parameters, and review workflow documentation</p>
+            </div>
+            <div class="card guide-content">
           <p>This page documents how to run and operate the surveillance system, the snapshot review workflow, and person classification tools.</p>
 
           <div class="card">
@@ -855,6 +1169,8 @@ python main.py</pre>
               <li>The imported model is archived under <code>detection_models/yolov8n_imported_&lt;timestamp&gt;.pt</code>.</li>
             </ul>
           </div>
+            </div>
+          </div>
         </body>
         </html>
         """
@@ -888,7 +1204,7 @@ python main.py</pre>
             link = f"/person/{quote(person_id)}"
             cards.append(
                 f"""
-                <a class="card" href="{link}">
+                <a class="person-card" href="{link}">
                   {thumb}
                   <div class="meta">
                     <div class="title">{display_name}</div>
@@ -903,43 +1219,64 @@ python main.py</pre>
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>People Gallery</title>
+          <title>DVR Console - People</title>
+          {self._shared_styles()}
           <style>
-            :root {{
-              --ink: #0f172a;
-              --muted: #64748b;
-              --stroke: rgba(148, 163, 184, 0.35);
+            .people-grid {{
+              display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+              gap: 16px;
             }}
-            * {{ box-sizing: border-box; }}
-            body {{ font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif; margin: 0; background: radial-gradient(700px 360px at 0% 0%, #dbeafe 0%, transparent 65%), #f4f7fc; color: var(--ink); padding: 24px 20px 34px; }}
-            .shell {{ max-width: 1180px; margin: 0 auto; }}
-            a {{ color: #1d4ed8; text-decoration: none; }}
-            .top {{ color: var(--muted); margin-bottom: 8px; }}
-            h1 {{ margin: 0 0 10px; }}
-            .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }}
-            .card {{
+            .person-card {{
               text-decoration: none;
               color: inherit;
-              background: rgba(255, 255, 255, 0.92);
-              border-radius: 14px;
+              background: var(--card-bg);
+              border-radius: 12px;
               overflow: hidden;
               border: 1px solid var(--stroke);
-              box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
-              transition: transform 140ms ease, box-shadow 140ms ease;
+              box-shadow: var(--card-shadow);
+              transition: transform 150ms ease, box-shadow 150ms ease;
             }}
-            .card:hover {{ transform: translateY(-2px); box-shadow: 0 18px 30px rgba(30, 64, 175, 0.12); }}
-            .thumb {{ width: 100%; height: 180px; object-fit: cover; display: block; background: #e2e8f0; }}
-            .thumb.empty {{ display:flex; align-items:center; justify-content:center; color:#475569; font-size:14px; }}
-            .meta {{ padding: 11px 12px 12px; }}
-            .title {{ font-weight: 700; }}
-            .sub {{ margin-top: 2px; color: var(--muted); font-size: 13px; }}
+            .person-card:hover {{
+              transform: translateY(-3px);
+              box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+            }}
+            .person-card .thumb {{
+              width: 100%;
+              height: 180px;
+              object-fit: cover;
+              display: block;
+              background: var(--bg-tertiary);
+            }}
+            .person-card .thumb.empty {{
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: var(--ink-muted);
+              font-size: 0.875rem;
+            }}
+            .person-card .meta {{
+              padding: 14px;
+            }}
+            .person-card .title {{
+              font-weight: 600;
+              font-size: 1rem;
+            }}
+            .person-card .sub {{
+              margin-top: 4px;
+              color: var(--ink-muted);
+              font-size: 0.8rem;
+            }}
           </style>
         </head>
         <body>
+          {self._render_nav("people")}
           <div class="shell">
-          <p class="top"><a href="/">← Home</a> · <a href="/guide">Guide</a> · <a href="/models">Model Management</a></p>
-          <h1>People Gallery</h1>
-          <div class="grid">{''.join(cards) if cards else '<p>No persons found.</p>'}</div>
+            <div class="page-header">
+              <h1>People Gallery</h1>
+              <p>Manage identities and face samples</p>
+            </div>
+            <div class="people-grid">{''.join(cards) if cards else '<p class="card">No persons found.</p>'}</div>
           </div>
         </body>
         </html>
@@ -1005,103 +1342,168 @@ python main.py</pre>
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>Snapshot Review</title>
+          <title>DVR Console - Snapshots</title>
+          {self._shared_styles()}
           <style>
-            :root {{
-              --ink: #0f172a;
-              --muted: #64748b;
-              --stroke: rgba(148, 163, 184, 0.38);
-              --card: rgba(255, 255, 255, 0.94);
-              --accent: #2563eb;
+            .viewer {{
+              position: sticky;
+              top: calc(var(--nav-height) + 16px);
+              background: var(--card-bg);
+              border-radius: 12px;
+              border: 1px solid var(--stroke);
+              padding: 16px;
+              box-shadow: var(--card-shadow);
+              margin-bottom: 20px;
             }}
-            * {{ box-sizing: border-box; }}
-            body {{ font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif; margin: 0; background: radial-gradient(860px 440px at 0% -10%, #dbeafe 0%, transparent 60%), #f3f7fe; color: var(--ink); padding: 24px 20px 40px; }}
-            .shell {{ max-width: 1240px; margin: 0 auto; }}
-            a {{ color: #1d4ed8; text-decoration: none; }}
-            .top {{ color: var(--muted); margin-bottom: 8px; }}
-            h1 {{ margin: 0; }}
-            .summary {{ margin: 6px 0 0; color: var(--muted); }}
-            .viewer {{ position: sticky; top: 14px; background: var(--card); border-radius: 14px; border: 1px solid var(--stroke); padding: 12px; box-shadow: 0 16px 28px rgba(15, 23, 42, 0.08); }}
-            .viewer img {{ width: 100%; max-height: 72vh; object-fit: contain; display: block; background: #e2e8f0; border-radius: 8px; }}
-            .meta {{ margin-top: 8px; font-size: 13px; color: var(--muted); word-break: break-all; }}
-            .actions {{ margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
-            .actions button {{ padding: 8px 12px; border: 1px solid #bfdbfe; border-radius: 9px; background: linear-gradient(180deg, #eff6ff, #dbeafe); color: #1e3a8a; font-weight: 700; cursor: pointer; }}
-            .actions input {{ padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 9px; min-width: 220px; }}
-            .state {{ font-size: 13px; color: var(--muted); margin-top: 4px; }}
-            .thumbs {{ margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }}
-            .sections {{ margin-top: 14px; display: grid; gap: 18px; }}
-            .section {{ background: var(--card); border: 1px solid var(--stroke); border-radius: 14px; padding: 12px; box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05); }}
-            .section h2 {{ margin: 0; font-size: 16px; }}
-            .section .sub {{ margin-top: 3px; font-size: 13px; color: var(--muted); }}
-            .thumb {{ border: 2px solid #d1d5db; border-radius: 10px; background: white; padding: 0; cursor: pointer; overflow: hidden; transition: transform 120ms ease, box-shadow 120ms ease; }}
-            .thumb:hover {{ transform: translateY(-1px); box-shadow: 0 8px 14px rgba(15, 23, 42, 0.12); }}
-            .thumb img {{ width: 100%; height: 100px; object-fit: cover; display: block; background: #e2e8f0; }}
+            .viewer img {{
+              width: 100%;
+              max-height: 65vh;
+              object-fit: contain;
+              display: block;
+              background: var(--bg-tertiary);
+              border-radius: 8px;
+            }}
+            .viewer-meta {{
+              margin-top: 10px;
+              font-size: 0.8rem;
+              color: var(--ink-muted);
+              word-break: break-all;
+            }}
+            .viewer-state {{
+              font-size: 0.85rem;
+              color: var(--ink-secondary);
+              margin-top: 6px;
+            }}
+            .viewer-state strong {{ color: var(--ink-primary); }}
+            .actions {{
+              margin-top: 12px;
+              display: flex;
+              gap: 8px;
+              flex-wrap: wrap;
+              align-items: center;
+            }}
+            .actions input {{
+              padding: 8px 12px;
+              border: 1px solid var(--stroke-strong);
+              border-radius: 8px;
+              min-width: 200px;
+              font-size: 0.875rem;
+            }}
+            .sections {{ display: grid; gap: 20px; }}
+            .section {{
+              background: var(--card-bg);
+              border: 1px solid var(--stroke);
+              border-radius: 12px;
+              padding: 16px;
+              box-shadow: var(--card-shadow);
+            }}
+            .section h2 {{ margin: 0 0 4px; font-size: 1rem; }}
+            .section .sub {{ font-size: 0.8rem; color: var(--ink-muted); margin-bottom: 12px; }}
+            .thumbs {{
+              display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+              gap: 8px;
+            }}
+            .thumb {{
+              border: 2px solid var(--stroke-strong);
+              border-radius: 8px;
+              background: var(--bg-secondary);
+              padding: 0;
+              cursor: pointer;
+              overflow: hidden;
+              transition: all 120ms ease;
+            }}
+            .thumb:hover {{
+              transform: translateY(-2px);
+              box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+            }}
+            .thumb img {{
+              width: 100%;
+              height: 90px;
+              object-fit: cover;
+              display: block;
+              background: var(--bg-tertiary);
+            }}
             .thumb.active {{ border-color: var(--accent); }}
             .thumb.selected {{ outline: 3px solid var(--accent); outline-offset: -3px; }}
-            .bulk {{ margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
-            .bulk button {{ padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 9px; background: #fff; cursor: pointer; }}
-            .bulk .count {{ font-size: 13px; color: var(--muted); min-width: 120px; font-weight: 700; }}
+            .bulk {{
+              margin-top: 12px;
+              display: flex;
+              gap: 8px;
+              flex-wrap: wrap;
+              align-items: center;
+              padding-top: 12px;
+              border-top: 1px solid var(--stroke);
+            }}
+            .bulk .count {{
+              font-size: 0.85rem;
+              color: var(--ink-secondary);
+              min-width: 100px;
+              font-weight: 600;
+            }}
           </style>
         </head>
         <body>
+          {self._render_nav("snapshots")}
           <div class="shell">
-          <p class="top"><a href="/">← Home</a> · <a href="/people">People Gallery</a> · <a href="/live">Live Feed</a> · <a href="/guide">Guide</a></p>
-          <h1>Snapshot Review</h1>
-          <p class="summary">{len(files)} snapshots</p>
-          {"<p>No snapshots found.</p>" if not files else f'''
+            <div class="page-header">
+              <h1>Snapshot Review</h1>
+              <p>{len(files)} snapshots to review</p>
+            </div>
+          {"<p class='card'>No snapshots found.</p>" if not files else f'''
           <section class="viewer">
             <a id="viewer-link" href="{first_src}" target="_blank" rel="noopener noreferrer">
               <img id="viewer-image" src="{first_src}" alt="Selected snapshot" />
             </a>
-            <div class="meta" id="viewer-source">{html.escape(first_source)}</div>
-            <div class="state">Detector label: <span id="detector-state">{html.escape(first_review.get('detector_label') or 'unreviewed')}</span> · Person: <span id="person-state">{html.escape(first_review.get('person_id') or 'none')}</span></div>
+            <div class="viewer-meta" id="viewer-source">{html.escape(first_source)}</div>
+            <div class="viewer-state"><strong>Label:</strong> <span id="detector-state">{html.escape(first_review.get('detector_label') or 'unreviewed')}</span> · <strong>Person:</strong> <span id="person-state">{html.escape(first_review.get('person_id') or 'none')}</span></div>
             <div class="actions">
               <form method="post" action="/snapshot/review-detector">
                 <input type="hidden" name="source_image" id="person-source-1" value="{html.escape(first_source)}" />
                 <input type="hidden" name="label" value="person" />
-                <button type="submit">Mark Person</button>
+                <button class="btn btn-primary" type="submit">Mark Person</button>
               </form>
               <form method="post" action="/snapshot/review-detector">
                 <input type="hidden" name="source_image" id="person-source-2" value="{html.escape(first_source)}" />
                 <input type="hidden" name="label" value="no_person" />
-                <button type="submit">Mark No Person</button>
+                <button class="btn" type="submit">Mark No Person</button>
               </form>
               <form method="post" action="/snapshot/review-detector">
                 <input type="hidden" name="source_image" id="person-source-3" value="{html.escape(first_source)}" />
                 <input type="hidden" name="label" value="clear" />
-                <button type="submit">Clear Label</button>
+                <button class="btn" type="submit">Clear Label</button>
               </form>
             </div>
             <div class="actions">
               <form method="post" action="/snapshot/assign-person">
                 <input type="hidden" name="source_image" id="assign-source" value="{html.escape(first_source)}" />
                 <input type="text" name="target_person" placeholder="person_id or person name" />
-                <button type="submit">Assign Person</button>
+                <button class="btn" type="submit">Assign Person</button>
               </form>
               <form method="post" action="/snapshot/assign-person">
                 <input type="hidden" name="source_image" id="clear-person-source" value="{html.escape(first_source)}" />
                 <input type="hidden" name="target_person" value="" />
-                <button type="submit">Clear Assignment</button>
+                <button class="btn" type="submit">Clear</button>
               </form>
             </div>
             <div class="bulk">
               <span class="count">Selected: <span id="selected-count">0</span></span>
-              <button type="button" id="select-all">Select All</button>
-              <button type="button" id="clear-selected">Clear Selection</button>
+              <button class="btn" type="button" id="select-all">Select All</button>
+              <button class="btn" type="button" id="clear-selected">Clear Selection</button>
               <form method="post" action="/snapshot/review-detector-bulk">
                 <input type="hidden" name="selected_sources" id="bulk-sources" value="" />
                 <input type="hidden" name="label" value="person" />
-                <button type="submit">Bulk Mark Person</button>
+                <button class="btn btn-primary" type="submit">Bulk Person</button>
               </form>
               <form method="post" action="/snapshot/review-detector-bulk">
                 <input type="hidden" name="selected_sources" id="bulk-sources-2" value="" />
                 <input type="hidden" name="label" value="no_person" />
-                <button type="submit">Bulk Mark No Person</button>
+                <button class="btn" type="submit">Bulk No Person</button>
               </form>
               <form method="post" action="/snapshot/review-detector-bulk">
                 <input type="hidden" name="selected_sources" id="bulk-sources-3" value="" />
                 <input type="hidden" name="label" value="clear" />
-                <button type="submit">Bulk Clear Label</button>
+                <button class="btn" type="submit">Bulk Clear</button>
               </form>
             </div>
           </section>
@@ -1303,75 +1705,156 @@ python main.py</pre>
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>{display_name}</title>
+          <title>DVR Console - {display_name}</title>
+          {self._shared_styles()}
           <style>
-            :root {{
-              --ink: #0f172a;
-              --muted: #64748b;
-              --stroke: rgba(148, 163, 184, 0.35);
+            .person-header {{
+              display: flex;
+              align-items: center;
+              gap: 16px;
+              margin-bottom: 20px;
             }}
-            * {{ box-sizing: border-box; }}
-            body {{ font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif; margin: 0; background: radial-gradient(740px 360px at 0% 0%, #dbeafe 0%, transparent 62%), #f4f8ff; color: var(--ink); padding: 24px 20px 36px; }}
-            .shell {{ max-width: 1200px; margin: 0 auto; }}
-            a {{ color: #1d4ed8; text-decoration: none; }}
-            .top {{ color: var(--muted); margin-bottom: 8px; }}
-            h1 {{ margin: 0; }}
-            .rename {{ display: flex; gap: 8px; margin: 8px 0 16px 0; }}
-            .rename input {{ flex: 1; max-width: 380px; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; }}
-            .rename button {{ padding: 8px 12px; border: 1px solid #bfdbfe; border-radius: 8px; background: linear-gradient(180deg, #eff6ff, #dbeafe); color: #1e3a8a; font-weight: 700; cursor: pointer; }}
-            .person-actions {{ margin: 0 0 16px 0; }}
-            .person-actions button {{ padding: 8px 12px; border: 1px solid #ef4444; border-radius: 8px; color: #b91c1c; background: #fff; cursor: pointer; }}
-            .viewer {{ background: rgba(255, 255, 255, 0.92); border-radius: 14px; border: 1px solid var(--stroke); padding: 12px; box-shadow: 0 16px 30px rgba(15, 23, 42, 0.07); }}
-            .viewer img {{ width: 100%; max-height: 72vh; object-fit: contain; display: block; background: #e2e8f0; border-radius: 8px; }}
-            .meta {{ margin-top: 8px; font-size: 13px; color: var(--muted); }}
-            .path {{ word-break: break-all; margin-top: 4px; }}
-            .thumbs {{ margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }}
-            .thumb {{ border: 2px solid transparent; border-radius: 10px; background: white; padding: 0; cursor: pointer; overflow: hidden; transition: transform 120ms ease, box-shadow 120ms ease; }}
-            .thumb:hover {{ transform: translateY(-1px); box-shadow: 0 8px 14px rgba(15, 23, 42, 0.1); }}
-            .thumb img {{ width: 100%; height: 100px; object-fit: cover; display: block; background: #e2e8f0; }}
-            .thumb.active {{ border-color: #2563eb; }}
-            .moderation {{ margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
-            .moderation input {{ padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; min-width: 220px; }}
-            .moderation button {{ padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; cursor: pointer; }}
-            .moderation .danger {{ border-color: #ef4444; color: #b91c1c; }}
-            .selected-id {{ font-size: 13px; color: #555; }}
+            .person-header h1 {{ margin: 0; }}
+            .person-header .badge {{
+              background: var(--accent-bg);
+              color: var(--accent);
+              padding: 4px 10px;
+              border-radius: 999px;
+              font-size: 0.8rem;
+              font-weight: 600;
+            }}
+            .person-actions {{
+              display: flex;
+              gap: 12px;
+              margin-bottom: 20px;
+              flex-wrap: wrap;
+            }}
+            .rename-form {{
+              display: flex;
+              gap: 8px;
+              flex: 1;
+              max-width: 400px;
+            }}
+            .rename-form input {{
+              flex: 1;
+              padding: 8px 12px;
+              border: 1px solid var(--stroke-strong);
+              border-radius: 8px;
+              font-size: 0.875rem;
+            }}
+            .viewer {{
+              background: var(--card-bg);
+              border-radius: 12px;
+              border: 1px solid var(--stroke);
+              padding: 16px;
+              box-shadow: var(--card-shadow);
+              margin-bottom: 16px;
+            }}
+            .viewer img {{
+              width: 100%;
+              max-height: 65vh;
+              object-fit: contain;
+              display: block;
+              background: var(--bg-tertiary);
+              border-radius: 8px;
+            }}
+            .viewer-info {{
+              margin-top: 12px;
+              font-size: 0.85rem;
+              color: var(--ink-muted);
+            }}
+            .viewer-path {{
+              word-break: break-all;
+              margin-top: 4px;
+              font-size: 0.8rem;
+            }}
+            .moderation {{
+              margin-top: 12px;
+              display: flex;
+              gap: 8px;
+              flex-wrap: wrap;
+              align-items: center;
+              padding-top: 12px;
+              border-top: 1px solid var(--stroke);
+            }}
+            .moderation input {{
+              padding: 8px 12px;
+              border: 1px solid var(--stroke-strong);
+              border-radius: 8px;
+              min-width: 200px;
+              font-size: 0.875rem;
+            }}
+            .sample-info {{
+              font-size: 0.85rem;
+              color: var(--ink-secondary);
+            }}
+            .thumbs {{
+              display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+              gap: 10px;
+            }}
+            .thumb {{
+              border: 2px solid transparent;
+              border-radius: 8px;
+              background: var(--bg-secondary);
+              padding: 0;
+              cursor: pointer;
+              overflow: hidden;
+              transition: all 120ms ease;
+            }}
+            .thumb:hover {{
+              transform: translateY(-2px);
+              box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+            }}
+            .thumb img {{
+              width: 100%;
+              height: 90px;
+              object-fit: cover;
+              display: block;
+              background: var(--bg-tertiary);
+            }}
+            .thumb.active {{ border-color: var(--accent); }}
           </style>
         </head>
         <body>
+          {self._render_nav("people")}
           <div class="shell">
-          <p class="top"><a href="/">← Home</a> · <a href="/people">People Gallery</a> · <a href="/snapshots">Snapshot Review</a></p>
-          <h1>{display_name}</h1>
-          <p><code>{person_id_esc}</code> · {len(samples)} samples</p>
-          <form class="rename" method="post" action="/person/{quote(person_id)}/rename">
-            <input type="text" name="display_name" value="{html.escape(display_name_raw)}" placeholder="Display name" />
-            <button type="submit">Save Name</button>
-          </form>
-          <form class="person-actions" method="post" action="/person/{quote(person_id)}/delete" onsubmit="return confirm('Delete this person and all associated samples?');">
-            <button type="submit">Delete Person</button>
-          </form>
-          {"<p>No samples.</p>" if not items else f'''
+            <div class="person-header">
+              <h1>{display_name}</h1>
+              <span class="badge">{len(samples)} samples</span>
+            </div>
+            <div class="person-actions">
+              <form class="rename-form" method="post" action="/person/{quote(person_id)}/rename">
+                <input type="text" name="display_name" value="{html.escape(display_name_raw)}" placeholder="Display name" />
+                <button class="btn btn-primary" type="submit">Save</button>
+              </form>
+              <form method="post" action="/person/{quote(person_id)}/delete" onsubmit="return confirm('Delete this person and all associated samples?');">
+                <button class="btn btn-danger" type="submit">Delete Person</button>
+              </form>
+            </div>
+          {"<p class='card'>No samples.</p>" if not items else f'''
           <section class="viewer">
             <a id="viewer-link" href="{first_src}" target="_blank" rel="noopener noreferrer">
               <img id="viewer-image" src="{first_src}" alt="Selected full-size snapshot" />
             </a>
-            <div class="meta" id="viewer-meta">{first_meta}</div>
-            <div class="path" id="viewer-path">{first_path}</div>
+            <div class="viewer-info" id="viewer-meta">{first_meta}</div>
+            <div class="viewer-path" id="viewer-path">{first_path}</div>
             <div class="moderation">
-              <div class="selected-id">Sample ID: <span id="selected-sample-id"></span></div>
+              <span class="sample-info">Sample: <strong id="selected-sample-id"></strong></span>
               <form method="post" action="/sample/move">
                 <input type="hidden" name="sample_id" id="move-sample-id" value="" />
                 <input type="hidden" name="return_person" value="{person_id_esc}" />
-                <input type="text" name="target_person_id" placeholder="target person_id or name" required />
-                <button type="submit">Move Sample</button>
+                <input type="text" name="target_person_id" placeholder="Move to person..." required />
+                <button class="btn" type="submit">Move</button>
               </form>
               <form method="post" action="/sample/delete" onsubmit="return confirm('Delete this sample from DB?');">
                 <input type="hidden" name="sample_id" id="delete-sample-id" value="" />
                 <input type="hidden" name="return_person" value="{person_id_esc}" />
-                <button class="danger" type="submit">Delete Sample</button>
+                <button class="btn btn-danger" type="submit">Delete Sample</button>
               </form>
             </div>
           </section>
-          <section class="thumbs" id="thumbs">{''.join(items)}</section>
+          <div class="thumbs" id="thumbs">{''.join(items)}</div>
           <script>
             (() => {{
               const thumbs = Array.from(document.querySelectorAll('.thumb'));
