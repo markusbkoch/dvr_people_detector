@@ -51,12 +51,18 @@ class RtspCamera:
         # increase HEVC reference-frame decode errors on noisy links.
         options = f"rtsp_transport;{self.rtsp_transport}"
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = options
+        
+        # Suppress FFmpeg HEVC decoder warnings (common with cheap DVRs)
+        os.environ["OPENCV_LOG_LEVEL"] = "ERROR"
+        os.environ["FFREPORT"] = ""  # Disable FFmpeg report file
+        os.environ["AV_LOG_FORCE_NOCOLOR"] = "1"
+        
         try:
-            cv2.setLogLevel(2)
+            cv2.setLogLevel(0)  # 0 = silent
         except Exception:
             pass
         try:
-            cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
+            cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_SILENT)
         except Exception:
             pass
         self._capture = cv2.VideoCapture(self.camera.rtsp_url, cv2.CAP_FFMPEG)
