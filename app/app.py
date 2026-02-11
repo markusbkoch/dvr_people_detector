@@ -1181,9 +1181,10 @@ class SurveillanceApp:
                     except queue.Full:
                         pass
             if is_rtsp:
-                # RTSP mode uses continuous ingest. Keep loop responsive without
-                # introducing fixed polling sleeps that drop temporal detail.
-                self.stop_event.wait(timeout=0.001)
+                # Read at target detection FPS to reduce decoder buffer churn
+                # and avoid frame corruption from erratic read patterns.
+                poll_interval = 1.0 / self.settings.rtsp_detection_fps if self.settings.rtsp_detection_fps > 0 else 0.001
+                self.stop_event.wait(timeout=poll_interval)
             else:
                 self.stop_event.wait(timeout=self.settings.detect_every_seconds)
 
