@@ -3,8 +3,14 @@ from __future__ import annotations
 import logging
 import os
 import re
+import signal
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+
+def _handle_sigterm(signum, frame):
+    """Convert SIGTERM to KeyboardInterrupt for graceful shutdown."""
+    raise KeyboardInterrupt()
 
 from app.app import SurveillanceApp
 from app.config import build_camera_map, load_settings
@@ -89,6 +95,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, _handle_sigterm)
     try:
         main()
     except KeyboardInterrupt:
