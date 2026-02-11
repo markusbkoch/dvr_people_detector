@@ -773,6 +773,21 @@ class SurveillanceApp:
         self.stats.inc_snapshots_saved()
         return output_path
 
+    def _draw_exclusion_zones(self, frame, camera_id: int):
+        """Draw translucent red overlay for exclusion zones on frame (in-place)."""
+        zones = self.settings.ignored_person_bboxes.get(camera_id, [])
+        if not zones:
+            return
+        # Create a single overlay to avoid compounding opacity on overlapping zones
+        overlay = frame.copy()
+        for x1, y1, x2, y2 in zones:
+            cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 255), -1)  # Red filled
+        # Blend overlay onto frame with 25% opacity
+        cv2.addWeighted(overlay, 0.25, frame, 0.75, 0, frame)
+        # Draw border for visibility
+        for x1, y1, x2, y2 in zones:
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 200), 2)
+
     def _publish_live_preview(self, camera_id: int, frame) -> None:
         """Publish latest per-camera preview frame in memory for gallery live view."""
         if self.settings.live_preview_fps <= 0:
@@ -785,6 +800,9 @@ class SurveillanceApp:
             if now - last < interval:
                 return
             self._last_live_preview_by_camera[camera_id] = now
+
+        # Draw exclusion zones before encoding
+        self._draw_exclusion_zones(frame, camera_id)
 
         ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
         if not ok:
