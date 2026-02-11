@@ -10,6 +10,11 @@ import sqlite3
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+class _ReusableThreadingHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer with SO_REUSEADDR for fast restarts."""
+    allow_reuse_address = True
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable, Optional
@@ -2454,7 +2459,7 @@ def create_gallery_server(
     FaceGalleryHandler.model_importer = model_importer
     FaceGalleryHandler.model_status_provider = model_status_provider
     FaceGalleryHandler.stats_provider = stats_provider
-    return ThreadingHTTPServer((host, port), FaceGalleryHandler)
+    return _ReusableThreadingHTTPServer((host, port), FaceGalleryHandler)
 
 
 def start_gallery_server(
