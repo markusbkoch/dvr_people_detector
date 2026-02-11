@@ -783,7 +783,7 @@ class SurveillanceApp:
         for x1, y1, x2, y2 in zones:
             cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 255), -1)  # Red filled
         # Blend overlay onto frame with 25% opacity
-        cv2.addWeighted(overlay, 0.25, frame, 0.75, 0, frame)
+        cv2.addWeighted(overlay, 0.25, frame, 0.75, 0, dst=frame)
         # Draw border for visibility
         for x1, y1, x2, y2 in zones:
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 200), 2)
